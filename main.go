@@ -70,6 +70,7 @@ var manifest = pluginapi.Manifest{
 	Version:     "1.4.1",
 	Description: "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
 	Author:      "AND",
+	Permissions: []string{pluginapi.IzinDM, pluginapi.IzinDosya},
 }
 
 func main() {

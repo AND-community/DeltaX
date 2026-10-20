@@ -4,5 +4,6 @@
   "version":     "1.4.1",
   "description": "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
   "author":      "AND",
+  "permissions": ["dm", "file"],
   "requires":    []
 }
