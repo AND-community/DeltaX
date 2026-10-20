@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/internal/ui"
 )
 
 func TestUygulaTemaRenkleriUygular(t *testing.T) {
@@ -25,13 +26,17 @@ func TestUygulaTemaRenkleriUygular(t *testing.T) {
 	}
 }
 
+// TestUygulaTemaBosAlanlarVarsayilanaDuser: boş tema, DeltaX'e özgü değil
+// AND'ın ortak varsayılan temasına (internal/ui) düşmeli — eklentiler artık
+// kendi ayrı paletlerini taşımıyor.
 func TestUygulaTemaBosAlanlarVarsayilanaDuser(t *testing.T) {
-	uygulaTema(pluginapi.ThemeReq{}) // boş tema — tümü varsayılana düşmeli
+	uygulaTema(pluginapi.ThemeReq{})
 
-	if got := stTitle.GetForeground(); got != lipgloss.Color("33") {
-		t.Errorf("boş temada varsayılan accent (33) bekleniyordu, %v geldi", got)
+	d := ui.DefaultTheme()
+	if got := stTitle.GetForeground(); got != lipgloss.Color(d.Accent) {
+		t.Errorf("boş temada varsayılan accent (%s) bekleniyordu, %v geldi", d.Accent, got)
 	}
-	if got := stSel.GetBackground(); got != lipgloss.Color("27") {
-		t.Errorf("boş temada varsayılan selBG (27) bekleniyordu, %v geldi", got)
+	if got := stSel.GetBackground(); got != lipgloss.Color(d.SelBG) {
+		t.Errorf("boş temada varsayılan selBG (%s) bekleniyordu, %v geldi", d.SelBG, got)
 	}
 }

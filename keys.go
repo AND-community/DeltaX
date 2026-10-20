@@ -324,6 +324,17 @@ func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.pending = true
 		m.notice = ""
+		// bkz. gonderilenDavetler'in doc yorumu: mDavetYanit işleyicisi bu
+		// kaydı arar. İyimser olarak burada işaretleniyor (SendDM henüz
+		// başarılı olmasa da) — en kötü ihtimalle hiç kabul gelmeyecek bir
+		// giriş bellekte kalır, zararsız.
+		if m.gonderilenDavetler == nil {
+			m.gonderilenDavetler = map[string]map[string]bool{}
+		}
+		if m.gonderilenDavetler[m.aktifGrup.ID] == nil {
+			m.gonderilenDavetler[m.aktifGrup.ID] = map[string]bool{}
+		}
+		m.gonderilenDavetler[m.aktifGrup.ID][peerID] = true
 		return m, pendingCmd(m, davetGonderCmd(m.client, peerID, *m.aktifGrup, m.kendiUye()))
 	}
 	var cmd tea.Cmd

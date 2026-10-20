@@ -24,6 +24,7 @@ import (
 
 	"github.com/lucian95511/and/internal/pluginapi"
 	"github.com/lucian95511/and/internal/pluginui"
+	"github.com/lucian95511/and/internal/ui"
 )
 
 // describeErr, ham bir Go/HTTP hatasını kullanıcıya gösterilecek anlaşılır bir
@@ -134,45 +135,48 @@ func klasoruAc(yol string) error {
 
 // ─── Stiller ──────────────────────────────────────────────────────────────────
 
+// Stiller AND'ın ortak paletinden (internal/ui) türetilir — DeltaX, AND'ın
+// TUI'si ve diğer eklentilerle aynı temada görünür.
 var (
-	stTitle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("33"))
-	stBold    = lipgloss.NewStyle().Bold(true)
-	stSel     = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color("27")).Foreground(lipgloss.Color("255"))
-	stNormal  = lipgloss.NewStyle()
-	stOk      = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	stErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	stDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	stMuted   = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
-	stFocused = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("33"))
-	stBorder  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
-	stAdd     = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	stDel     = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	stMod     = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-	stWarn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("220"))
+	stTitle   lipgloss.Style
+	stBold    lipgloss.Style
+	stSel     lipgloss.Style
+	stNormal  lipgloss.Style
+	stOk      lipgloss.Style
+	stErr     lipgloss.Style
+	stDim     lipgloss.Style
+	stMuted   lipgloss.Style
+	stFocused lipgloss.Style
+	stBorder  lipgloss.Style
+	stAdd     lipgloss.Style
+	stDel     lipgloss.Style
+	stMod     lipgloss.Style
+	stWarn    lipgloss.Style
 )
 
-// uygulaTema, AND'ın GET /api/v1/theme'den döndürdüğü renkleri (Accent,
-// SelBG, SelFG, Muted — internal/tui/styles.go'daki aynı alanlar) bu
-// eklentinin kendi stillerine uygular. Hata/başarı (Ok/Err/Warn/Add/Del/Mod)
-// renkleri kasıtlı olarak temadan etkilenmez — bu, AND'ın ana TUI'sinin de
-// izlediği kuraldır (bkz. internal/tui/styles.go: applyThemeColors).
-func uygulaTema(t pluginapi.ThemeReq) {
-	accent := renkVeyaVarsayilan(t.Accent, "33")
-	selBG := renkVeyaVarsayilan(t.SelBG, "27")
-	selFG := renkVeyaVarsayilan(t.SelFG, "255")
-	muted := renkVeyaVarsayilan(t.Muted, "240")
+func init() { stilleriKur() }
 
-	stTitle = lipgloss.NewStyle().Bold(true).Foreground(accent)
-	stSel = lipgloss.NewStyle().Bold(true).Background(selBG).Foreground(selFG)
-	stDim = lipgloss.NewStyle().Foreground(muted)
-	stMuted = lipgloss.NewStyle().Foreground(muted).Italic(true)
-	stFocused = lipgloss.NewStyle().Bold(true).Foreground(accent)
-	stBorder = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1)
+func stilleriKur() {
+	stTitle = ui.S.Title
+	stBold = ui.S.Bold
+	stSel = ui.S.Selected
+	stNormal = lipgloss.NewStyle()
+	stOk = ui.S.Success
+	stErr = ui.S.Error
+	stDim = ui.S.Muted
+	stMuted = ui.S.Muted
+	stFocused = ui.S.Title
+	stBorder = ui.S.CardFocus
+	stAdd = ui.S.Success
+	stDel = ui.S.Error
+	stMod = ui.S.Warning
+	stWarn = ui.S.Warning.Bold(true)
 }
 
-func renkVeyaVarsayilan(deger, varsayilan string) lipgloss.Color {
-	if deger == "" {
-		return lipgloss.Color(varsayilan)
-	}
-	return lipgloss.Color(deger)
+// uygulaTema, AND'ın GET /api/v1/theme'den döndürdüğü temayı ortak palete
+// uygular ve stilleri yeniden kurar. Hata/başarı/değişiklik (Ok/Err/Warn/
+// Add/Del/Mod) renkleri temadan etkilenmez — ui.Apply'ın kuralı.
+func uygulaTema(t pluginapi.ThemeReq) {
+	ui.Apply(ui.Theme(t))
+	stilleriKur()
 }

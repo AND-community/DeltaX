@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -101,6 +102,42 @@ func TestSnapshotVeCheckout(t *testing.T) {
 	}
 	if string(data2) != "ikinci" {
 		t.Fatalf("checkout sonrası silinen dosya geri gelmedi: %q", data2)
+	}
+}
+
+// TestDalaGecZipSlipGuvensizYoluReddeder, dalaGec'in (ve dolayısıyla
+// dosyayiCalismayaYaz'ın) çalışma dizini dışına yazım yapan bir ağaç
+// girdisini reddettiğini doğrular. Gerçek dünyada böyle bir Agac,
+// agacOlustur (yerel dosya taraması, her zaman güvenli yollar üretir) yerine
+// kötü niyetli bir grup üyesinin push ettiği bir ağ paketinden gelir —
+// paketUygula yalnızca içerik hash'ini doğrular, Yol alanının içeriğini
+// kontrol etmez. Bu testte aynı senaryoyu, bir Agac nesnesini doğrudan
+// nesneYaz ile (agacOlustur'u atlayarak) yazarak simüle ediyoruz.
+func TestDalaGecZipSlipGuvensizYoluReddeder(t *testing.T) {
+	dataDir, projeID, calismaDir := yeniTestProjesi(t)
+
+	blobHash, err := nesneYaz(dataDir, projeID, 'B', []byte("kötü niyetli içerik"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	kotuAgac := Agac{Girdiler: []AgacGirdi{{Yol: "../disari-yazildi.txt", Hash: blobHash, Boyut: 20}}}
+	agacPayload, err := json.Marshal(kotuAgac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	treeHash, err := nesneYaz(dataDir, projeID, 'T', agacPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := dalaGec(dataDir, projeID, calismaDir, treeHash); err == nil {
+		t.Fatal("güvensiz yol içeren ağaç girdisiyle checkout hata vermeliydi")
+	}
+
+	// calismaDir'in bir üst dizininde hiçbir şey yazılmamış olmalı.
+	disariYol := filepath.Join(filepath.Dir(calismaDir), "disari-yazildi.txt")
+	if _, err := os.Stat(disariYol); err == nil {
+		t.Fatalf("dosya çalışma dizini dışına yazılmış: %s", disariYol)
 	}
 }
 
@@ -332,13 +369,71 @@ func TestGunlukFiltrele(t *testing.T) {
 	}
 }
 
+// TestPaketOlusturOkunamayanNesnedeHataDoner, paketOlustur'un artık yerel
+// depoda eksik/okunamayan bir nesneyle karşılaşınca bunu sessizce atlayıp
+// eksik bir paketi "başarılı" gibi döndürmediğini, bunun yerine bir hata
+// döndürdüğünü doğrular — eski davranışta eksik nesnenin çocukları da hiç
+// kuyruğa alınmıyordu ve paket, alıcının fark edemeyeceği şekilde eksik
+// kalıyordu.
+func TestPaketOlusturOkunamayanNesnedeHataDoner(t *testing.T) {
+	dataDir, projeID, calismaDir := yeniTestProjesi(t)
+	yazDosya(t, calismaDir, "a.txt", "merhaba")
+
+	treeHash, girdiler, _, err := agacOlustur(dataDir, projeID, calismaDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitHash, err := commitOlustur(dataDir, projeID, treeHash, nil, "test", "ilk")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// a.txt'nin blob nesnesini diskten sil — yerel depo bozulmuş gibi davran.
+	blobHash := girdiler[0].Hash
+	blobYolu, err := nesneYolu(dataDir, projeID, blobHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(blobYolu); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := paketOlustur(dataDir, projeID, "ana", commitHash, map[string]bool{}); err == nil {
+		t.Fatal("eksik bir nesne varken paketOlustur hata döndürmeliydi, sessizce eksik paket üretmemeliydi")
+	}
+}
+
 func TestPaketAyristir(t *testing.T) {
-	ad := paketDosyaAdi("grup1", "proje1")
+	grupID, projeID := rastgeleID(), rastgeleID()
+	ad := paketDosyaAdi(grupID, projeID)
 	g, p, ok := paketAyristir(ad)
-	if !ok || g != "grup1" || p != "proje1" {
+	if !ok || g != grupID || p != projeID {
 		t.Fatalf("paket dosya adı ayrıştırılamadı: %s -> %s %s %v", ad, g, p, ok)
 	}
 	if _, _, ok := paketAyristir("baska_bir_dosya.txt"); ok {
 		t.Fatal("ilgisiz dosya adı proje ağı paketi olarak tanınmamalıydı")
+	}
+}
+
+// TestPaketAyristirYolGecisiniReddeder, paketAyristir'in grupID/projeID'nin
+// rastgeleID() biçiminde (16 hex karakter) olmasını zorunlu kıldığını
+// doğrular — bu olmadan, saldırganın seçtiği bir dosya adı (ör.
+// "projeag-<gerçekGrupID>-../../../tmp/evil-1.pack") pushPaketiIsle
+// tarafından doğrudan filepath.Join'e verilip çalışma dizini dışında
+// dizin/dosya oluşturulmasına (path traversal) yol açabilirdi.
+func TestPaketAyristirYolGecisiniReddeder(t *testing.T) {
+	gercekGrupID := rastgeleID()
+
+	// "../../../tmp/evil" içinde "-" karakteri yok, bu yüzden dosya adı
+	// yine de tam 4 parçaya bölünür ve eskiden (biçim kontrolü olmadan)
+	// projeID olarak kabul edilirdi.
+	kotu := "projeag-" + gercekGrupID + "-../../../tmp/evil-1.pack"
+	if _, projeID, ok := paketAyristir(kotu); ok {
+		t.Fatalf("yol geçişi içeren dosya adı reddedilmeliydi: %s -> projeID=%q", kotu, projeID)
+	}
+
+	kotu2 := "projeag-" + gercekGrupID + "-notgecerlihex-1.pack"
+	if _, _, ok := paketAyristir(kotu2); ok {
+		t.Fatalf("hex olmayan projeID kabul edilmemeliydi: %s", kotu2)
 	}
 }

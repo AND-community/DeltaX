@@ -313,6 +313,16 @@ func dalaGec(dataDir, projeID, calismaDir, hedefTree string) error {
 }
 
 func dosyayiCalismayaYaz(dataDir, projeID, calismaDir string, g AgacGirdi) error {
+	// Agac girdileri (tree entries) grup üyelerinden ağ üzerinden gelir ve
+	// yalnızca içerik hash'i doğrulanır (bkz. paketUygula) — g.Yol'un
+	// güvenli bir göreli yol olduğu HİÇ doğrulanmaz. Bu kontrol olmadan
+	// kötü niyetli bir üye "../../../.ssh/authorized_keys" gibi bir yol
+	// içeren bir ağaç nesnesi push edebilir; dalaGec/birlestirmeUygula bunu
+	// çalışma dizini dışına yazardı (zip-slip). editor.go'nun kullanıcı
+	// girdisi için zaten uyguladığı aynı kontrol burada da uygulanıyor.
+	if !gecerliGoreliYol(g.Yol) {
+		return fmt.Errorf("güvensiz dosya yolu reddedildi: %q", g.Yol)
+	}
 	_, data, err := nesneOku(dataDir, projeID, g.Hash)
 	if err != nil {
 		return err
@@ -547,6 +557,12 @@ func birlestirmeUygula(dataDir, projeID, calismaDir, temelTree, yerelTree, uzakT
 
 	var catismalar []string
 	for _, yol := range birlesikYollar(temel, yerel, uzak) {
+		if !gecerliGoreliYol(yol) {
+			// bkz. dosyayiCalismayaYaz'ın doc yorumu — güvensiz bir yol
+			// içeren ağaç girdisi çalışma dizini dışına yazım/silmeye yol
+			// açabilir (zip-slip); bu yol için birleştirmeyi sessizce atla.
+			continue
+		}
 		b, bok := temel[yol]
 		l, lok := yerel[yol]
 		r, rok := uzak[yol]

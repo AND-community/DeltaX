@@ -8,8 +8,8 @@ func TestPaketGonderenGuvenilirMiBelirliGrubaGoreKontrolEder(t *testing.T) {
 	uyeA := Uye{Ad: "uyeA", PeerID: "peerA"}
 	uyeB := Uye{Ad: "uyeB", PeerID: "peerB"}
 
-	grupIcinde := Grup{ID: "grup1", Ad: "İçinde Olduğu Grup", Sir: mustSir(t), Uyeler: []Uye{uyeA}}
-	grupDisinda := Grup{ID: "grup2", Ad: "Üyesi Olmadığı Grup", Sir: mustSir(t), Uyeler: []Uye{uyeB}}
+	grupIcinde := Grup{ID: rastgeleID(), Ad: "İçinde Olduğu Grup", Sir: mustSir(t), Uyeler: []Uye{uyeA}}
+	grupDisinda := Grup{ID: rastgeleID(), Ad: "Üyesi Olmadığı Grup", Sir: mustSir(t), Uyeler: []Uye{uyeB}}
 	if err := grupKaydet(dataDir, grupIcinde); err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +17,7 @@ func TestPaketGonderenGuvenilirMiBelirliGrubaGoreKontrolEder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dosyaKendiGrubu := paketDosyaAdi(grupIcinde.ID, "proje1")
+	dosyaKendiGrubu := paketDosyaAdi(grupIcinde.ID, rastgeleID())
 	if !paketGonderenGuvenilirMi(dataDir, dosyaKendiGrubu, "peerA") {
 		t.Fatal("peerA kendi grubunun paketi için güvenilir sayılmalıydı")
 	}
@@ -25,7 +25,7 @@ func TestPaketGonderenGuvenilirMiBelirliGrubaGoreKontrolEder(t *testing.T) {
 	// peerA, grup1'in üyesi ama grup2'nin değil — grup2 adına gelen bir
 	// paket için otomatik onaylanmamalı, üyesi olduğu HERHANGİ bir grup
 	// yeterli sayılmamalı.
-	dosyaBaskaGrup := paketDosyaAdi(grupDisinda.ID, "proje2")
+	dosyaBaskaGrup := paketDosyaAdi(grupDisinda.ID, rastgeleID())
 	if paketGonderenGuvenilirMi(dataDir, dosyaBaskaGrup, "peerA") {
 		t.Fatal("peerA, üyesi olmadığı grup2 adına gelen paket için güvenilir sayılmamalıydı")
 	}

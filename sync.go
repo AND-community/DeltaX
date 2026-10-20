@@ -30,11 +30,21 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/lucian95511/and/internal/pluginapi"
 )
+
+// reRastgeleID, rastgeleID()'nin ürettiği biçimi (16 küçük harf hex
+// karakteri) doğrular. paketAyristir bunu grupID/projeID'yi bir dosya
+// adından çıkarırken kullanır — bunlar filepath.Join ile doğrudan disk
+// yollarına eklendiğinden (bkz. projeKokDizini/projeCalismaDizini/
+// projeNesneDizini), bu biçim kontrolü olmadan "../../../tmp/evil" gibi bir
+// dosya adı, çalışma dizini dışına dizin/dosya oluşturulmasına (path
+// traversal) yol açabilir.
+var reRastgeleID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 const protokolOnEki = "AND-PROJEAG/1|"
 
@@ -264,7 +274,17 @@ func paketOlustur(dataDir, projeID, dal, kokCommit string, bilinenNesneler map[s
 		sirali = append(sirali, h)
 		tip, payload, err := nesneOku(dataDir, projeID, h)
 		if err != nil {
-			continue
+			// h, kokCommit'ten ulaşılabilir görünen bir nesne (bir
+			// commit/ağaç'ın işaret ettiği bir hash), yani yerel depoda
+			// bulunması gerekirdi. Sessizce atlamak (eskiden olduğu gibi)
+			// bu nesnenin çocuklarının (bir ağaç/blob'un referans ettiği
+			// hash'lerin) de asla kuyruğa eklenmemesi anlamına gelirdi —
+			// gönderilen paket, alıcı tarafın gerçekte eksik olduğunu asla
+			// bilemeyeceği şekilde SESSİZCE eksik/kırık olurdu. Yerel depo
+			// bozulmuşsa bunu push'u başarısız kılan bir hata olarak
+			// bildirmek, "başarılı" görünen ama tamamlanamayan bir
+			// senkronizasyondan çok daha güvenlidir.
+			return nil, 0, fmt.Errorf("nesne %s okunamadı — yerel depo bozuk olabilir: %w", h, err)
 		}
 		switch tip {
 		case 'C':
@@ -301,11 +321,16 @@ func paketOlustur(dataDir, projeID, dal, kokCommit string, bilinenNesneler map[s
 	for _, h := range sirali {
 		path, err := nesneYolu(dataDir, projeID, h)
 		if err != nil {
-			continue
+			return nil, 0, fmt.Errorf("nesne %s için yol hesaplanamadı: %w", h, err)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			continue
+			// Az önce (yukarıdaki taramada) başarıyla okunmuştu — burada
+			// başarısız olması bir yarış (paralel silme) ya da diskte
+			// sonradan oluşan bir bozulma anlamına gelir. Eskiden bu da
+			// sessizce atlanıp sirali/nesneSayisi'nde sayılmaya devam
+			// ederdi, oysa nesne pakete hiç yazılmamış olurdu.
+			return nil, 0, fmt.Errorf("nesne %s okunamadı: %w", h, err)
 		}
 		if err := tw.WriteHeader(&tar.Header{Name: h, Size: int64(len(data)), Mode: 0o600, ModTime: time.Now()}); err != nil {
 			return nil, 0, err
@@ -349,7 +374,13 @@ func paketUygula(dataDir, projeID string, veriler []byte) (paketManifest, int, e
 		if err != nil {
 			return manifest, sayac, err
 		}
-		if hdr.Size < 0 || hdr.Size > 64*1024*1024 {
+		// maxDosyaBoyutu (vcs.go) ile aynı sınır kullanılır: agacOlustur bir
+		// commit'e bu boyuta kadar dosyaları dahil etmeye izin verir; burada
+		// daha küçük, bağımsız bir sabit kullanmak (eskiden 64 MB), yerelde
+		// geçerli kabul edilip commit'lenmiş 65-200 MB arası bir dosyanın,
+		// alıcı tarafta hiçbir hata/uyarı olmadan sessizce atlanmasına
+		// (dangling blob referansı bırakarak) yol açardı.
+		if hdr.Size < 0 || hdr.Size > maxDosyaBoyutu {
 			continue // tekil nesne için makul olmayan boyut — atla
 		}
 		data := make([]byte, hdr.Size)
@@ -388,6 +419,12 @@ func paketAyristir(dosyaAdi string) (grupID, projeID string, ok bool) {
 	base := strings.TrimSuffix(filepath.Base(dosyaAdi), ".pack")
 	parcalar := strings.Split(base, "-")
 	if len(parcalar) != 4 || parcalar[0] != "projeag" {
+		return "", "", false
+	}
+	// grupID/projeID her zaman rastgeleID()'nin ürettiği biçimde olmalı —
+	// bkz. reRastgeleID'nin doc yorumu. Bu kontrol olmadan, gönderenin
+	// seçtiği dosya adı doğrudan disk yollarına eklenir.
+	if !reRastgeleID.MatchString(parcalar[1]) || !reRastgeleID.MatchString(parcalar[2]) {
 		return "", "", false
 	}
 	return parcalar[1], parcalar[2], true

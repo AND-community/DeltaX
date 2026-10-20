@@ -14,6 +14,7 @@ package main
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -63,7 +64,13 @@ func yokSayilsinMi(desenler []string, rel string) bool {
 	return false
 }
 
+// "/" içeren desenler her zaman "/"-ayrılmış rel değerlerine karşı eşleştirilir
+// (bkz. vcs.go'daki filepath.ToSlash normalizasyonu). path.Match (path/filepath.Match
+// DEĞİL) kullanılır, çünkü path.Match'in ayraç karakteri her zaman '/' iken
+// filepath.Match Windows'ta '\' kullanır — bu durumda desendeki "/" sıradan bir
+// karakter sayılır ve "*" onu da yutarak (ör. "build/*.log") "build/alt/x.log"
+// gibi eşleşmemesi gereken bir yolu yanlışlıkla eşleştirir.
 func desenEsleisyorMu(desen, deger string) bool {
-	ok, err := filepath.Match(desen, deger)
+	ok, err := path.Match(desen, deger)
 	return err == nil && ok
 }

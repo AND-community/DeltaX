@@ -7,9 +7,39 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/lucian95511/and/internal/ui"
 )
 
+// View, ekranları AND'ın tam ekran çerçevesine (ui.Page) koyar. Onay ve
+// yardım kutuları ekranın ortasında açılan diyaloglar olarak kalır.
 func (m model) View() string {
+	switch m.ekran {
+	case ekDosyaOnay, ekOnay, ekYardim:
+		return m.ekranGorunumu()
+	}
+	return tamEkran(m.w, m.h, m.ekranGorunumu())
+}
+
+// tamEkran, bir ekran görünümünü tam ekran çerçeveye yerleştirir. Her
+// görünümün SON satırı eski biçimli kısayol satırıdır ("↑/↓ seç   esc geri");
+// o satır ayrılıp AND'ın kısayol satırı biçiminde ekranın en altına konur.
+func tamEkran(w, h int, icerik string) string {
+	icerik = strings.TrimRight(icerik, "\n")
+	govde, son := "", icerik
+	if i := strings.LastIndex(icerik, "\n"); i >= 0 {
+		govde, son = icerik[:i], icerik[i+1:]
+	}
+	iw := 72
+	if w > 0 {
+		iw = ui.ContentWidth(w)
+	}
+	alt := ui.Divider(iw) + "\n" + ui.KeyHints(iw, ui.ParseHints(ansi.Strip(son))...)
+	return ui.Page(w, h, govde, alt)
+}
+
+func (m model) ekranGorunumu() string {
 	switch m.ekran {
 	case ekAnaMenu:
 		return m.viewAnaMenu()

@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/internal/ui"
 )
 
 // ─── Ekranlar ──────────────────────────────────────────────────────────────
@@ -111,10 +112,18 @@ type projeOlusturSonucu struct {
 	err   error
 }
 type durumSonucu struct {
-	durum DurumSonucu
-	err   error
+	projeID string // bkz. commitSonucu'nun doc yorumu
+	durum   DurumSonucu
+	err     error
 }
 type commitSonucu struct {
+	// projeID, bu sonucun HANGİ proje için hesaplandığını taşır. Update()
+	// bunu m.aktifProje.ID ile karşılaştırır: kullanıcı bu async işlem
+	// sürerken (m.pending==true iken gezinme tuşları pending'i kontrol
+	// etmediğinden) başka bir projeye geçmişse, sonuç artık m.aktifProje'ye
+	// ait değildir — projeID kontrolü olmadan eski sonuç yanlışlıkla
+	// ŞİMDİKİ (farklı) projeye yazılıp diske kaydedilirdi.
+	projeID string
 	hash    string
 	atlanan int
 	err     error
@@ -123,9 +132,10 @@ type gunlukSonucu struct {
 	girdiler []LogGirdisi
 }
 type dalDegistirSonucu struct {
-	dal   string
-	kirli bool
-	err   error
+	projeID string // bkz. commitSonucu'nun doc yorumu
+	dal     string
+	kirli   bool
+	err     error
 }
 type diffSonucu struct {
 	satirlar []DiffSatiri
@@ -137,6 +147,7 @@ type pushSonucu struct {
 	err         error
 }
 type birlestirSonucu struct {
+	projeID    string // bkz. commitSonucu'nun doc yorumu
 	catismalar []string
 	yeniCommit string
 	uzakHash   string
@@ -194,6 +205,17 @@ type model struct {
 
 	bekleyenDavetler []bekleyenDavet
 	davetIdx         int
+
+	// gonderilenDavetler, bu oturumda hangi grup için hangi peer'a davet
+	// gönderdiğimizi izler (grupID -> peerID -> true) — mDavetYanit
+	// işleyicisi, bir "kabul" mesajını yalnızca gerçekten bu şekilde
+	// davet edilmiş bir peer'dan geliyorsa uygular; aksi halde hiç davet
+	// edilmemiş biri bile kendi kendine "kabul ettim" diyerek gruba
+	// katılabilirdi. Kasıtlı olarak yalnızca bellekte tutulur (yeniden
+	// başlatmada sıfırlanır) — kalıcı olmaması güvenli yönde başarısız
+	// olur: en kötü ihtimalle uygulama yeniden başlatıldıktan hemen sonra
+	// gelen meşru bir kabul reddedilir, davet tekrar gönderilebilir.
+	gonderilenDavetler map[string]map[string]bool
 
 	projeler   []Proje
 	projeIdx   int
@@ -299,23 +321,24 @@ func newModel(c *pluginapi.Client, id pluginapi.IdentityInfo, dataDir string) mo
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 
 	return model{
-		client:           c,
-		identity:         id,
-		dataDir:          dataDir,
-		ekran:            ekAnaMenu,
-		grupAdIn:         grupAdIn,
-		grupAramaIn:      grupAramaIn,
-		uyeDavetIn:       uyeDavetIn,
-		projeAdIn:        projeAdIn,
-		commitMsgIn:      commitMsgIn,
-		yeniDalIn:        yeniDalIn,
-		yeniDosyaIn:      yeniDosyaIn,
-		dosyaDuzenleTA:   dosyaDuzenleTA,
-		gunlukAramaIn:    gunlukAramaIn,
-		disaAktarIn:      disaAktarIn,
-		cevrimici:        map[string]bool{},
-		spinner:          sp,
-		bekleyenDavetler: davetleriYukle(dataDir),
+		client:             c,
+		identity:           id,
+		dataDir:            dataDir,
+		ekran:              ekAnaMenu,
+		grupAdIn:           grupAdIn,
+		grupAramaIn:        grupAramaIn,
+		uyeDavetIn:         uyeDavetIn,
+		projeAdIn:          projeAdIn,
+		commitMsgIn:        commitMsgIn,
+		yeniDalIn:          yeniDalIn,
+		yeniDosyaIn:        yeniDosyaIn,
+		dosyaDuzenleTA:     dosyaDuzenleTA,
+		gunlukAramaIn:      gunlukAramaIn,
+		disaAktarIn:        disaAktarIn,
+		cevrimici:          map[string]bool{},
+		spinner:            sp,
+		bekleyenDavetler:   davetleriYukle(dataDir),
+		gonderilenDavetler: map[string]map[string]bool{},
 	}
 }
 
@@ -325,6 +348,18 @@ func (m model) kendiUye() Uye {
 
 func (m model) calismaDir() string {
 	return projeCalismaDizini(m.dataDir, m.aktifProje.ID)
+}
+
+// projeSonucuGuncelMi, projeID (bir arka plan komutunu başlatırken sabitlenen
+// proje) hâlâ m.aktifProje ile eşleşiyor mu diye bakar. Gezinme tuşları
+// (proje/grup listesine dönüp başka bir proje seçmek gibi) m.pending'i
+// kontrol etmediğinden, bir işlem sürerken kullanıcı başka bir projeye
+// geçebilir — bu durumda gelen sonuç artık m.aktifProje'ye ait değildir ve
+// commitSonucu/dalDegistirSonucu/birlestirSonucu gibi diske yazan
+// işleyicilerin bunu uygulaması, o an görüntülenen (farklı) projenin
+// dosyasını yanlış veriyle ezerdi.
+func (m model) projeSonucuGuncelMi(projeID string) bool {
+	return m.aktifProje != nil && m.aktifProje.ID == projeID
 }
 
 // bildirGuncelle, arka plandan (zarfIsle, filePollResultMsg) gelen bir
@@ -557,28 +592,38 @@ func projeOlusturCmd(dataDir, grupID, ad string) tea.Cmd {
 
 func durumCmd(dataDir, projeID, calismaDir, head string) tea.Cmd {
 	return func() tea.Msg {
-		headTree := headTreeOf(dataDir, projeID, head)
+		headTree, err := headTreeOf(dataDir, projeID, head)
+		if err != nil {
+			return durumSonucu{projeID: projeID, err: err}
+		}
 		d, err := durumHesapla(dataDir, projeID, calismaDir, headTree)
-		return durumSonucu{durum: d, err: err}
+		return durumSonucu{projeID: projeID, durum: d, err: err}
 	}
 }
 
-func headTreeOf(dataDir, projeID, head string) string {
+// headTreeOf, head commit'inin ağaç hash'ini döndürür. head=="" GEÇERLİ bir
+// durumdur (henüz hiç kayıt yok / ortak ata bulunamadı — boş ağaç). Ancak
+// head boş DEĞİLKEN commitOku başarısız olursa (ör. bozuk/eksik nesne
+// dosyası), bu ayrı bir durumdur ve eskiden ikisi de aynı şekilde ""
+// döndürülüyordu — çağıran taraf bunu "boş ağaç" sanıp örneğin dalaGec'i
+// çalışma dizinini tamamen SİLİP hiçbir şey geri yazmadan (sessiz veri
+// kaybı) çağırabiliyordu. Şimdi ikinci durum bir hata olarak ayrıştırılıyor.
+func headTreeOf(dataDir, projeID, head string) (string, error) {
 	if head == "" {
-		return ""
+		return "", nil
 	}
 	c, err := commitOku(dataDir, projeID, head)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("commit %s okunamadı: %w", kisaHash(head), err)
 	}
-	return c.Agac
+	return c.Agac, nil
 }
 
 func commitCmd(dataDir, projeID, calismaDir, head, yazar, mesaj string) tea.Cmd {
 	return func() tea.Msg {
 		yeniTree, _, atlanan, err := agacOlustur(dataDir, projeID, calismaDir)
 		if err != nil {
-			return commitSonucu{err: err}
+			return commitSonucu{projeID: projeID, err: err}
 		}
 		var ebeveynler []string
 		if head != "" {
@@ -588,15 +633,15 @@ func commitCmd(dataDir, projeID, calismaDir, head, yazar, mesaj string) tea.Cmd 
 			ebeveynler = append(ebeveynler, ikinci)
 		} else if head != "" {
 			if hc, err := commitOku(dataDir, projeID, head); err == nil && hc.Agac == yeniTree {
-				return commitSonucu{err: fmt.Errorf("kaydedilecek değişiklik yok")}
+				return commitSonucu{projeID: projeID, err: fmt.Errorf("kaydedilecek değişiklik yok")}
 			}
 		}
 		hash, err := commitOlustur(dataDir, projeID, yeniTree, ebeveynler, yazar, mesaj)
 		if err != nil {
-			return commitSonucu{err: err}
+			return commitSonucu{projeID: projeID, err: err}
 		}
 		birlesmeTemizle(dataDir, projeID)
-		return commitSonucu{hash: hash, atlanan: len(atlanan)}
+		return commitSonucu{projeID: projeID, hash: hash, atlanan: len(atlanan)}
 	}
 }
 
@@ -608,25 +653,34 @@ func gunlukCmd(dataDir, projeID, head string) tea.Cmd {
 
 func dalDegistirCmd(dataDir, projeID, calismaDir, mevcutHead, hedefDal, hedefHead string) tea.Cmd {
 	return func() tea.Msg {
-		mevcutTree := headTreeOf(dataDir, projeID, mevcutHead)
+		mevcutTree, err := headTreeOf(dataDir, projeID, mevcutHead)
+		if err != nil {
+			return dalDegistirSonucu{projeID: projeID, err: err}
+		}
 		durum, err := durumHesapla(dataDir, projeID, calismaDir, mevcutTree)
 		if err != nil {
-			return dalDegistirSonucu{err: err}
+			return dalDegistirSonucu{projeID: projeID, err: err}
 		}
 		if !durum.temizMi() {
-			return dalDegistirSonucu{kirli: true}
+			return dalDegistirSonucu{projeID: projeID, kirli: true}
 		}
-		hedefTree := headTreeOf(dataDir, projeID, hedefHead)
+		hedefTree, err := headTreeOf(dataDir, projeID, hedefHead)
+		if err != nil {
+			return dalDegistirSonucu{projeID: projeID, err: err}
+		}
 		if err := dalaGec(dataDir, projeID, calismaDir, hedefTree); err != nil {
-			return dalDegistirSonucu{err: err}
+			return dalDegistirSonucu{projeID: projeID, err: err}
 		}
-		return dalDegistirSonucu{dal: hedefDal}
+		return dalDegistirSonucu{projeID: projeID, dal: hedefDal}
 	}
 }
 
 func diffCmd(dataDir, projeID, calismaDir, head, yol string) tea.Cmd {
 	return func() tea.Msg {
-		headTree := headTreeOf(dataDir, projeID, head)
+		headTree, err := headTreeOf(dataDir, projeID, head)
+		if err != nil {
+			return diffSonucu{err: err}
+		}
 		satirlar, err := dosyaFarkiHesapla(dataDir, projeID, calismaDir, headTree, yol)
 		return diffSonucu{satirlar: satirlar, err: err}
 	}
@@ -682,70 +736,80 @@ func birlestirCmd(dataDir, projeID, calismaDir, yerelHead, uzakHead, yazar strin
 	return func() tea.Msg {
 		yerelCommit, err := commitOku(dataDir, projeID, yerelHead)
 		if err != nil {
-			return birlestirSonucu{err: err}
+			return birlestirSonucu{projeID: projeID, err: err}
 		}
 		durum, err := durumHesapla(dataDir, projeID, calismaDir, yerelCommit.Agac)
 		if err != nil {
-			return birlestirSonucu{err: err}
+			return birlestirSonucu{projeID: projeID, err: err}
 		}
 		if !durum.temizMi() {
-			return birlestirSonucu{err: fmt.Errorf("önce mevcut değişiklikleri kaydet")}
+			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("önce mevcut değişiklikleri kaydet")}
 		}
 
 		uzakCommit, err := commitOku(dataDir, projeID, uzakHead)
 		if err != nil {
-			return birlestirSonucu{err: fmt.Errorf("uzak commit bulunamadı — önce Gönder/Çek ile nesneleri al: %w", err)}
+			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("uzak commit bulunamadı — önce Gönder/Çek ile nesneleri al: %w", err)}
 		}
 
 		temel := ortakAta(dataDir, projeID, yerelHead, uzakHead)
 		if temel == uzakHead {
-			return birlestirSonucu{err: fmt.Errorf("zaten güncel")}
+			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("zaten güncel")}
 		}
 		if temel == yerelHead {
 			if err := dalaGec(dataDir, projeID, calismaDir, uzakCommit.Agac); err != nil {
-				return birlestirSonucu{err: err}
+				return birlestirSonucu{projeID: projeID, err: err}
 			}
-			return birlestirSonucu{yeniCommit: uzakHead}
+			return birlestirSonucu{projeID: projeID, yeniCommit: uzakHead}
 		}
 
-		temelTree := headTreeOf(dataDir, projeID, temel)
+		temelTree, err := headTreeOf(dataDir, projeID, temel)
+		if err != nil {
+			return birlestirSonucu{projeID: projeID, err: err}
+		}
 		catismalar, err := birlestirmeUygula(dataDir, projeID, calismaDir, temelTree, yerelCommit.Agac, uzakCommit.Agac)
 		if err != nil {
-			return birlestirSonucu{err: err}
+			return birlestirSonucu{projeID: projeID, err: err}
 		}
 		if len(catismalar) > 0 {
 			_ = birlesmeIsaretle(dataDir, projeID, uzakHead)
-			return birlestirSonucu{catismalar: catismalar, uzakHash: uzakHead}
+			return birlestirSonucu{projeID: projeID, catismalar: catismalar, uzakHash: uzakHead}
 		}
 		yeniTree, _, _, err := agacOlustur(dataDir, projeID, calismaDir)
 		if err != nil {
-			return birlestirSonucu{err: err}
+			return birlestirSonucu{projeID: projeID, err: err}
 		}
 		yeniHash, err := commitOlustur(dataDir, projeID, yeniTree, []string{yerelHead, uzakHead}, yazar, "Birleştirme: "+kisaHash(uzakHead))
 		if err != nil {
-			return birlestirSonucu{err: err}
+			return birlestirSonucu{projeID: projeID, err: err}
 		}
-		return birlestirSonucu{yeniCommit: yeniHash}
+		return birlestirSonucu{projeID: projeID, yeniCommit: yeniHash}
 	}
 }
 
 // ─── DM protokol zarfı işleme ───────────────────────────────────────────────
 
-func (m model) zarfIsle(z kontrolZarfi) (model, tea.Cmd) {
+// zarfIsle, gelen bir kontrol mesajını işler. verifiedSender, bu DM'in
+// GERÇEKTEN geldiği, libp2p bağlantısıyla kriptografik olarak doğrulanmış
+// peer ID'sidir (bkz. pluginapi.DMMsg.VerifiedPeerID) — z.Payload içindeki
+// herhangi bir "gönderen" alanı ise yalnızca göndericinin kendi beyanıdır ve
+// tek başına ASLA yetki kanıtı olarak kullanılmamalıdır. Her dal, yetki
+// kontrolünün yanı sıra, payload'ın iddia ettiği kimliğin verifiedSender'la
+// eşleştiğini de doğrular; aksi halde herhangi bir peer, payload'a başka
+// birinin (ör. gerçek kurucunun) peer ID'sini yazarak onun yerine geçebilir.
+func (m model) zarfIsle(z kontrolZarfi, verifiedSender string) (model, tea.Cmd) {
 	switch z.Tip {
 	case mDavet, mUyeGuncelle:
 		var dp davetPayload
 		if json.Unmarshal(z.Payload, &dp) != nil {
 			return m, nil
 		}
+		if dp.Gonderen.PeerID != verifiedSender {
+			return m, nil
+		}
 		if g, err := grupOku(m.dataDir, z.GrupID); err == nil {
 			// Zaten bildiğimiz bir grup için gelen güncelleme, yalnızca zaten
 			// güvendiğimiz bir yetkilinin (kurucu ya da yönetici) peer
-			// ID'siyle eşleşiyorsa kabul edilir. DM API'si gönderenin gerçek
-			// peer ID'sini doğrulamaz (yalnızca kendi beyan ettiği bir
-			// görünen ad taşır) — bu kontrol olmadan gruba hiç üye olmayan
-			// biri bile sahte bir üye listesi/isim göndererek rostere el
-			// koyabilir.
+			// ID'siyle eşleşiyorsa kabul edilir.
 			if !g.yetkiliMi(dp.Gonderen.PeerID) {
 				return m, nil
 			}
@@ -777,9 +841,23 @@ func (m model) zarfIsle(z kontrolZarfi) (model, tea.Cmd) {
 		if json.Unmarshal(z.Payload, &yp) != nil {
 			return m, nil
 		}
+		if yp.Uye.PeerID != verifiedSender {
+			return m, nil
+		}
+		// Bu grup için gerçekten bu peer'a bir davet gönderdiğimizi
+		// doğrula — aksi halde davet edilmemiş biri bile, kendi gerçek
+		// kimliğiyle "kabul ediyorum" diyerek gruba katılabilirdi (hiçbir
+		// zaman gönderilmemiş bir daveti "kabul etmek"). bkz.
+		// gonderilenDavetler'in doc yorumu.
+		if !m.gonderilenDavetler[z.GrupID][verifiedSender] {
+			return m, nil
+		}
 		g, err := grupOku(m.dataDir, z.GrupID)
 		if err != nil || !g.yetkiliMi(m.identity.PeerID) || !yp.Kabul {
 			return m, nil
+		}
+		if m.gonderilenDavetler[z.GrupID] != nil {
+			delete(m.gonderilenDavetler[z.GrupID], verifiedSender)
 		}
 		g.uyeEkleGuncelle(yp.Uye)
 		_ = grupKaydet(m.dataDir, g)
@@ -801,6 +879,9 @@ func (m model) zarfIsle(z kontrolZarfi) (model, tea.Cmd) {
 		if json.Unmarshal(z.Payload, &pp) != nil {
 			return m, nil
 		}
+		if pp.Isteyen.PeerID != verifiedSender {
+			return m, nil
+		}
 		g, gerr := grupOku(m.dataDir, z.GrupID)
 		p, perr := projeOku(m.dataDir, z.ProjeID)
 		if gerr != nil || perr != nil || !g.uyeMi(pp.Isteyen.PeerID) {
@@ -811,6 +892,13 @@ func (m model) zarfIsle(z kontrolZarfi) (model, tea.Cmd) {
 	case mAyril:
 		var ap ayrilPayload
 		if json.Unmarshal(z.Payload, &ap) != nil {
+			return m, nil
+		}
+		// ayrilBildir yalnızca kendi ayrılışını bildirmek için kullanılır
+		// (bkz. sync.go'nun doc yorumu) — bu yüzden ap.Uye, DM'i GERÇEKTEN
+		// gönderen peer'la eşleşmelidir; aksi halde herhangi bir peer,
+		// başka bir üyeyi keyfi olarak "ayrılmış" gösterip attırabilirdi.
+		if ap.Uye.PeerID != verifiedSender {
 			return m, nil
 		}
 		g, err := grupOku(m.dataDir, z.GrupID)
@@ -829,6 +917,9 @@ func (m model) zarfIsle(z kontrolZarfi) (model, tea.Cmd) {
 	case mGrupKapat:
 		var kp grupKapatPayload
 		if json.Unmarshal(z.Payload, &kp) != nil {
+			return m, nil
+		}
+		if kp.Gonderen.PeerID != verifiedSender {
 			return m, nil
 		}
 		g, err := grupOku(m.dataDir, z.GrupID)
@@ -855,12 +946,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
-		m.gunlukVP.Width = msg.Width - 4
-		m.gunlukVP.Height = msg.Height - 8
-		m.diffVP.Width = msg.Width - 4
-		m.diffVP.Height = msg.Height - 8
-		m.dosyaDuzenleTA.SetWidth(msg.Width - 4)
-		m.dosyaDuzenleTA.SetHeight(msg.Height - 8)
+		// Ekranlar tam ekran çerçevede (bkz. tamEkran): kenarlık ve dolgu
+		// düşülür; başlık, ayraç ve kısayol satırı için de yer bırakılır.
+		cw, ch := ui.ContentWidth(msg.Width), max(msg.Height-12, 3)
+		m.gunlukVP.Width = cw
+		m.gunlukVP.Height = ch
+		m.diffVP.Width = cw
+		m.diffVP.Height = ch
+		m.dosyaDuzenleTA.SetWidth(cw)
+		m.dosyaDuzenleTA.SetHeight(ch)
 		return m, nil
 
 	case spinner.TickMsg:
@@ -879,7 +973,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, dm := range msg.msgs {
 			if z, ok := zarfCoz(dm.Text); ok {
 				var cmd tea.Cmd
-				m, cmd = m.zarfIsle(z)
+				m, cmd = m.zarfIsle(z, dm.VerifiedPeerID)
 				if cmd != nil {
 					cmds = append(cmds, cmd)
 				}
@@ -1001,6 +1095,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case durumSonucu:
 		m.pending = false
+		if !m.projeSonucuGuncelMi(msg.projeID) {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.notice, m.isErr = "Durum hesaplanamadı: "+describeErr(msg.err), true
 			m.ekran = ekProjePaneli
@@ -1022,6 +1119,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commitSonucu:
 		m.pending = false
+		if !m.projeSonucuGuncelMi(msg.projeID) {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.notice, m.isErr = "Kayıt oluşturulamadı: "+describeErr(msg.err), true
 			return m, nil
@@ -1051,6 +1151,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case dalDegistirSonucu:
 		m.pending = false
+		if !m.projeSonucuGuncelMi(msg.projeID) {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.notice, m.isErr = "Dal değiştirilemedi: "+describeErr(msg.err), true
 			return m, nil
@@ -1094,6 +1197,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case birlestirSonucu:
 		m.pending = false
+		if !m.projeSonucuGuncelMi(msg.projeID) {
+			return m, nil
+		}
 		if msg.err != nil {
 			m.notice, m.isErr = "Birleştirme hatası: "+describeErr(msg.err), true
 			return m, nil
