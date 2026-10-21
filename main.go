@@ -67,7 +67,7 @@ func describeErr(err error) string {
 var manifest = pluginapi.Manifest{
 	Name:        "DeltaX",
 	Label:       "DeltaX",
-	Version:     "1.4.1",
+	Version:     "1.5.0",
 	Description: "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
 	Author:      "AND",
 	Permissions: []string{pluginapi.IzinDM, pluginapi.IzinDosya},

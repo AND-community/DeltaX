@@ -53,8 +53,8 @@ Seçenekler: **Gruplarım**, **Yeni Grup Oluştur**, **Davetler**, **Kimlik Bilg
 ### Grup akışı
 
 1. **Yeni Grup Oluştur** — grup adını gir; rastgele bir grup anahtarı üretilir.
-2. Grup panelinde `i` ile bir üyeyi Peer ID'siyle davet et (kurucu ya da bir yönetici davet edebilir).
-3. Davet edilen kişi **Davetler** ekranında `a` ile kabul eder — kabul otomatik olarak davet edene bildirilir ve güncel üye listesi gruptaki herkese yeniden yayınlanır, böylece herkesin listesi yakınsar.
+2. Grup panelinde `i` ile bir üyeyi Peer ID'siyle davet et (kurucu ya da bir yönetici davet edebilir). Kişi çevrimdışıysa AND daveti giden kutusunda bekletir ve bağlandığında iletir (7 güne kadar).
+3. Davet edilen kişi **Davetler** ekranında `a` ile kabul eder (ya da `r` ile reddeder) — yanıt otomatik olarak davet edene bildirilir ve güncel üye listesi gruptaki herkese yeniden yayınlanır, böylece herkesin listesi yakınsar. Davet eden o sırada DeltaX'i kapatmış olsa da yanıt kaybolmaz: bir sonraki açılışta işlenir.
 4. Grup panelinde `n` ile yeni bir proje oluştur.
 
 ### Yönetici ata (yedek kurucu)
@@ -118,7 +118,7 @@ Dosyayı elle düzenleyip işaretleri kaldırdıktan sonra **Kaydet (Commit)** i
 
 | Kanal | Kullanım |
 |-------|----------|
-| DM (`/and/dm/1.0.0`) | Küçük kontrol mesajları — davet, üye/yönetici listesi güncellemesi, push bildirimi, pull isteği, gruptan ayrılma, grup kapatma. `AND-PROJEAG/1\|`-önekli base64 JSON olarak taşınır; bu önek diğer eklentilerin normal DM trafiğinden ayırt edilmesini sağlar. |
+| DM (`/and/dm/1.0.0`) | Küçük kontrol mesajları — davet, üye/yönetici listesi güncellemesi, push bildirimi, pull isteği, gruptan ayrılma, grup kapatma. `AND-PROJEAG/1\|`-önekli base64 JSON olarak taşınır (önek: `protokol.DeltaXOnEki`); AND bu önekli mesajları okunmamış sayısına katmaz, Özel Chat göstermez. Grup durumunu değiştirenler (davet ve yanıtı, üye listesi, ayrılma, kapatma) giden kutusuyla gönderilir; push bildirimi ve pull isteği doğrudan gider, çünkü dosya aktarımı iki tarafın da çevrimiçi olmasını gerektirir. Gelenler AND'ın DM geçmişinden okunur (bkz. Kalıcılık). |
 | Dosya aktarımı (`/and/file/2.0.0`) | Asıl veri — commit/ağaç/blob nesnelerinin `projeag-<grupID>-<projeID>-<zaman>.pack` adlı gzip'li tar arşivi. Arşiv, göndermeden önce grup sırrıyla AES-256-GCM ile şifrelenir. |
 
 ### Güvenlik modeli
@@ -128,6 +128,8 @@ Dosyayı elle düzenleyip işaretleri kaldırdıktan sonra **Kaydet (Commit)** i
 - **Otomatik dosya onayı yalnızca grup üyelerinden:** AND'ın dosya aktarım onay akışı korunur. `projeag-` önekli bir dosya yalnızca gönderenin libp2p tarafından doğrulanmış Peer ID'si (`FileConsentReq.SenderID` — sahtecilik yapılamaz) yerel olarak bilinen bir grubun üyesiyse otomatik kabul edilir; aksi halde her zamanki gibi elle onay istenir.
 - **Pull isteklerinde hedef doğrulama:** Bir üyenin pull isteğine otomatik yanıt verilirken istekte belirtilen Peer ID, o an yerelde bilinen grup üye listesiyle karşılaştırılır — böylece biri sahte bir hedef Peer ID vererek veriyi grup dışına yönlendiremez.
 - **Kurucu ve yönetici doğrulaması.** Davet/roster/kapatma mesajları yalnızca gönderenin peer ID'si zaten bilinen `KurucuPeer` ya da `Yoneticiler` listesiyle eşleşiyorsa kabul edilir — gruba hiç üye olmayan biri sahte bir mesajla rostere el koyamaz.
+- **Yalnızca davet edilen katılabilir.** Bir "kabul" yanıtı, ancak o eşe o grup için gerçekten davet gönderilmişse ve yanıt 30 gün içinde geldiyse uygulanır. Gönderilen davetler diskte tutulur; bir davet yanıtlandığında (kabul ya da ret) kullanılmış sayılır.
+- **Eski istekler yanıtlanmaz.** DeltaX kapalıyken gelmiş, bir saatten eski bir pull isteğine paket gönderilmez; 30 günden eski bir davet listelenmez.
 
 ### Kalıcılık
 
@@ -140,13 +142,19 @@ DeltaX/
   projeler/<projeID>/nesneler/…      (içerik-adresli commit/ağaç/blob deposu)
   projeler/<projeID>/calisma/…       (çalışma klasörü — burada dosyaları düzenlersin)
   projeler/<projeID>/MERGE_HEAD      (yalnızca çakışmalı bir birleştirme beklerken var olur)
+  bekleyen_davetler.json             (sana gelen, henüz yanıtlamadığın davetler)
+  gonderilen_davetler.json           (senin gönderdiğin, yanıt bekleyen davetler)
+  dm_imleci.json                     (AND'ın DM geçmişinde nereye kadar işlendiği)
 ```
+
+DeltaX grup mesajlarını AND'ın DM geçmişinden okur ve nereye kadar işlediğini `dm_imleci.json`'a yazar: kapalıyken gelen mesajlar bir sonraki açılışta sırayla işlenir, aynı mesaj iki kez işlenmez. İlk açılışta önceki mesajlar işlenmez. Geçmişi olmayan eski bir AND'da yalnızca açıkken gelen mesajlar alınır.
 
 ---
 
 ## Sınırlamalar
 
-- **Yalnızca eklenti açıkken senkronize olur.** DM/dosya polling yalnızca eklenti çalışırken sürer; kapalıyken gönderilen davet/push bildirimleri kaçırılır (dosya paketinin kendisi grup üyesiyse otomatik kabul edilip işlenir, ancak DM bildirimi kaçırılabilir).
+- **Dosya aktarımı iki tarafın da çevrimiçi olmasını gerektirir.** Grup mesajları (davet, üye listesi, ayrılma, kapatma) çevrimdışı alıcıya bağlandığında iletilir ve DeltaX kapalıyken gelenler kaybolmaz; ama push paketi ve pull isteği ancak karşı taraf o an bağlıyken çalışır.
+- **AND'ın DM geçmişi sınırlıdır.** Geçmiş en fazla 300 makine mesajı tutar (insanların mesajlarından ayrı); DeltaX çok uzun süre kapalı kalırsa en eski grup mesajları düşebilir. Üye listesi bir sonraki güncellemede yeniden yakınsar.
 - **Kurucu değişmez/devredilemez.** Yalnızca "yönetici" (yedek kurucu) ataması yapılabilir — bkz. Kullanım/"Yönetici ata". Kurucu gruptan "çıkamaz" — yalnızca grubu tamamen kapatabilir.
 - **Basitleştirilmiş birleştirme.** Metin tabanlı, satır düzeyinde bir üç yönlü birleştirme yapılır; ikili (binary) dosyalarda çakışma her zaman tüm dosya olarak işaretlenir.
 - **Büyük dosyalar.** Anlık görüntüye dahil edilecek tekil dosyalar 200 MB, satır bazlı fark (diff) için 512 KB, gömülü düzenleyiciyle açılabilecek dosyalar için 2 MB sınırı vardır; üzerindekiler atlanır/bildirilir (harici bir editör/dosya yöneticisi kullanılabilir).
@@ -160,7 +168,7 @@ DeltaX/
 {
   "name":        "DeltaX",
   "label":       "DeltaX",
-  "version":     "1.4.1",
+  "version":     "1.5.0",
   "description": "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
   "author":      "AND"
 }
@@ -175,7 +183,10 @@ Kaynak kod: [Eklentiler/DeltaX/](.)
 | Dosya | İçerik |
 |-------|--------|
 | `main.go` | Manifest, giriş noktası, stiller |
-| `model.go` | Bubble Tea modeli, async komutlar, DM zarf işleme, `Update` |
+| `model.go` | Bubble Tea modeli, async komutlar, DM zarf işleme (`zarfIsle`) |
+| `isleyiciler.go` | `Update`: mesaj türü başına işleyiciler |
+| `gecmis.go` | DM geçmişinden okuma, imleç, gönderilen davetlerin defteri |
+| `istemci.go` | DeltaX'in kullandığı AND API'si (testlerde sahtesi kullanılır) |
 | `keys.go` | Ekran bazlı klavye olayı işleyicileri |
 | `view.go` | Ekran render fonksiyonları |
 | `store.go` | Grup/proje kalıcılığı |
@@ -192,6 +203,7 @@ Kaynak kod: [Eklentiler/DeltaX/](.)
 
 | Sürüm | Değişiklik |
 |-------|------------|
+| 1.5.0 | Grup mesajları kaçırılmaz: gelenler AND'ın DM geçmişinden okunur (kapalıyken gelenler açılışta işlenir), grup durumunu değiştirenler giden kutusuyla gider; gönderilen davetler diskte tutulur (30 gün), ret bildirilir; eski pull istekleri yanıtlanmaz; davet ederken Peer ID biçimi, kendini ve mevcut üyeyi davet etme denetlenir; makine mesajları Özel Chat'te ve AND'ın okunmamış sayısında görünmez |
 | 1.3.0 | Eklenti adı **ANDSnap**'den **DeltaX**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/DeltaX/` dahil) |
 | 1.2.0 | Eklenti adı **proje_ag**'den **ANDSnap**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/ANDSnap/` dahil) |
 | 1.1.0 | `.projeagignore`, yönetici (yedek kurucu) ataması, gömülü dosya düzenleyici, günlükte arama, projeyi `.zip` olarak dışa aktarma, AND temasını otomatik uygulama, ana menüde `esc` ile çıkış |

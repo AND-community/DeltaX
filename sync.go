@@ -6,7 +6,11 @@ package main
 //   - DM (AND'ın /api/v1/dm/*)  → küçük kontrol mesajları (davet, push
 //     bildirimi, pull isteği). Metin alanına base64 JSON gömülür ve
 //     protokolOnEki ile işaretlenir; bu sayede normal sohbet/DM
-//     mesajlarından ayırt edilir.
+//     mesajlarından ayırt edilir (AND ve Özel Chat onları göstermez).
+//     Grup durumunu değiştiren mesajlar (davet ve yanıtı, üye listesi,
+//     ayrılma, kapatma) giden kutusuyla gider: alıcı çevrimdışıysa AND
+//     bekletir, bağlandığında iletir. Alıcı tarafta DeltaX kapalıyken
+//     gelenler de kaybolmaz (bkz. gecmis.go).
 //   - Dosya aktarımı (AND'ın /api/v1/file/*) → asıl veri: proje
 //     nesnelerinin (commit/ağaç/blob) grup sırrıyla AES-256-GCM ile
 //     şifrelenmiş tar.gz paketi. AND'ın var olan onay akışı (consent)
@@ -32,9 +36,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/protokol"
 )
 
 // reRastgeleID, rastgeleID()'nin ürettiği biçimi (16 küçük harf hex
@@ -46,7 +51,7 @@ import (
 // traversal) yol açabilir.
 var reRastgeleID = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
-const protokolOnEki = "AND-PROJEAG/1|"
+const protokolOnEki = protokol.DeltaXOnEki + "1|"
 
 type mesajTipi string
 
@@ -147,7 +152,7 @@ func davetPayloadOlustur(g Grup, gonderen Uye) davetPayload {
 
 // davetGonder, kendi (kurucu ya da bir yönetici) adına hedefPeer'a davet
 // gönderir.
-func davetGonder(c *pluginapi.Client, hedefPeer string, g Grup, kendi Uye) error {
+func davetGonder(c istemci, hedefPeer string, g Grup, kendi Uye) error {
 	payload, err := json.Marshal(davetPayloadOlustur(g, kendi))
 	if err != nil {
 		return err
@@ -157,10 +162,10 @@ func davetGonder(c *pluginapi.Client, hedefPeer string, g Grup, kendi Uye) error
 	if err != nil {
 		return err
 	}
-	return c.SendDM(hedefPeer, metin)
+	return c.SendDMQueued(hedefPeer, metin)
 }
 
-func davetYanitGonder(c *pluginapi.Client, hedefPeer, grupID string, kabul bool, kendi Uye) error {
+func davetYanitGonder(c istemci, hedefPeer, grupID string, kabul bool, kendi Uye) error {
 	payload, err := json.Marshal(davetYanitPayload{Kabul: kabul, Uye: kendi})
 	if err != nil {
 		return err
@@ -170,13 +175,13 @@ func davetYanitGonder(c *pluginapi.Client, hedefPeer, grupID string, kabul bool,
 	if err != nil {
 		return err
 	}
-	return c.SendDM(hedefPeer, metin)
+	return c.SendDMQueued(hedefPeer, metin)
 }
 
 // uyeGuncellemesiYayinla, güncel üye/yönetici listesini gruptaki herkese
 // (kendisi hariç) yeniden gönderir — böylece üyelik değişiklikleri tüm
 // üyelerde yakınsar. Kurucu ya da bir yönetici çağırabilir.
-func uyeGuncellemesiYayinla(c *pluginapi.Client, g Grup, kendi Uye) []error {
+func uyeGuncellemesiYayinla(c istemci, g Grup, kendi Uye) []error {
 	payload, err := json.Marshal(davetPayloadOlustur(g, kendi))
 	if err != nil {
 		return []error{err}
@@ -186,22 +191,13 @@ func uyeGuncellemesiYayinla(c *pluginapi.Client, g Grup, kendi Uye) []error {
 	if err != nil {
 		return []error{err}
 	}
-	var hatalar []error
-	for _, u := range g.Uyeler {
-		if u.PeerID == kendi.PeerID {
-			continue
-		}
-		if err := c.SendDM(u.PeerID, metin); err != nil {
-			hatalar = append(hatalar, fmt.Errorf("%s: %w", u.Ad, err))
-		}
-	}
-	return hatalar
+	return herkeseGonder(c, g.Uyeler, kendi.PeerID, metin)
 }
 
 // ayrilBildir, bir üyenin gruptan ayrıldığını kurucuya VE tüm yöneticilere
 // bildirir (kurucu ulaşılamaz durumdaysa bir yönetici üyeyi listeden
 // çıkarabilsin diye).
-func ayrilBildir(c *pluginapi.Client, g Grup, kendi Uye) []error {
+func ayrilBildir(c istemci, g Grup, kendi Uye) []error {
 	payload, err := json.Marshal(ayrilPayload{Uye: kendi})
 	if err != nil {
 		return []error{err}
@@ -211,22 +207,13 @@ func ayrilBildir(c *pluginapi.Client, g Grup, kendi Uye) []error {
 	if err != nil {
 		return []error{err}
 	}
-	var hatalar []error
 	hedefler := append([]Uye{{PeerID: g.KurucuPeer, Ad: g.KurucuAd}}, g.Yoneticiler...)
-	for _, h := range hedefler {
-		if h.PeerID == "" || h.PeerID == kendi.PeerID {
-			continue
-		}
-		if err := c.SendDM(h.PeerID, metin); err != nil {
-			hatalar = append(hatalar, fmt.Errorf("%s: %w", h.Ad, err))
-		}
-	}
-	return hatalar
+	return herkeseGonder(c, hedefler, kendi.PeerID, metin)
 }
 
 // grupKapatBildir, grubun kapatıldığını (dağıtıldığını) gruptaki herkese
 // (kendisi hariç) bildirir. Kurucu ya da bir yönetici çağırabilir.
-func grupKapatBildir(c *pluginapi.Client, g Grup, kendi Uye) []error {
+func grupKapatBildir(c istemci, g Grup, kendi Uye) []error {
 	payload, err := json.Marshal(grupKapatPayload{Gonderen: kendi})
 	if err != nil {
 		return []error{err}
@@ -236,15 +223,34 @@ func grupKapatBildir(c *pluginapi.Client, g Grup, kendi Uye) []error {
 	if err != nil {
 		return []error{err}
 	}
-	var hatalar []error
-	for _, u := range g.Uyeler {
-		if u.PeerID == kendi.PeerID {
+	return herkeseGonder(c, g.Uyeler, kendi.PeerID, metin)
+}
+
+// herkeseGonder, metni hedeflere (kendisi ve tekrarlar hariç) giden kutusu
+// üzerinden gönderir: çevrimdışı olan, bağlandığında alır. Gönderimler
+// paraleldir; ulaşılamayan bir üyeye doğrudan gönderim denemesi (AND'da
+// sıraya almadan önce birkaç saniye sürer) ötekileri bekletmez.
+func herkeseGonder(c istemci, hedefler []Uye, kendiPeer, metin string) []error {
+	var (
+		mu      sync.Mutex
+		hatalar []error
+		wg      sync.WaitGroup
+	)
+	gorulen := map[string]bool{"": true, kendiPeer: true}
+	for _, h := range hedefler {
+		if gorulen[h.PeerID] {
 			continue
 		}
-		if err := c.SendDM(u.PeerID, metin); err != nil {
-			hatalar = append(hatalar, fmt.Errorf("%s: %w", u.Ad, err))
-		}
+		gorulen[h.PeerID] = true
+		wg.Go(func() {
+			if err := c.SendDMQueued(h.PeerID, metin); err != nil {
+				mu.Lock()
+				hatalar = append(hatalar, fmt.Errorf("%s: %w", h.Ad, err))
+				mu.Unlock()
+			}
+		})
 	}
+	wg.Wait()
 	return hatalar
 }
 
@@ -434,7 +440,7 @@ func paketAyristir(dosyaAdi string) (grupID, projeID string, ok bool) {
 // gönderir ve ardından bir bildirim DM'i yollar. bilinenBaslangic boşsa
 // (hiç senkron olmamışsa) tam paket, doluysa yalnızca o commit'ten sonraki
 // fark gönderilir.
-func pushYap(c *pluginapi.Client, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBaslangic string) (int, error) {
+func pushYap(c istemci, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBaslangic string) (int, error) {
 	head := p.Dallar[p.AktifDal]
 	if head == "" {
 		return 0, fmt.Errorf("önce en az bir kayıt (commit) oluşturmalısın")
@@ -485,7 +491,7 @@ func pushYap(c *pluginapi.Client, dataDir string, g Grup, p Proje, hedefUye Uye,
 
 // ─── Çek (pull) isteği ──────────────────────────────────────────────────────
 
-func pullIste(c *pluginapi.Client, hedefUye Uye, g Grup, p Proje, kendi Uye) error {
+func pullIste(c istemci, hedefUye Uye, g Grup, p Proje, kendi Uye) error {
 	bilinen := p.Dallar[p.AktifDal]
 	payload, err := json.Marshal(pullIstekPayload{Dal: p.AktifDal, BilinenHash: bilinen, Isteyen: kendi})
 	if err != nil {

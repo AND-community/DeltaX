@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -23,6 +24,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.boyutDegisti(msg)
 	case spinner.TickMsg:
 		return m.spinnerTik(msg)
+	case dmGecmisMsg:
+		return m.dmGecmisiGeldi(msg)
 	case dmPollResultMsg:
 		return m.dmlerGeldi(msg)
 	case filePollResultMsg:
@@ -94,6 +97,8 @@ func (m model) spinnerTik(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// dmlerGeldi, geçmişi olmayan eski bir AND'da canlı gelen DM'leri işler
+// (bkz. dmGecmisiGeldi).
 func (m model) dmlerGeldi(msg dmPollResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		return m, dmPollCmdAfter(m.client)
@@ -102,7 +107,7 @@ func (m model) dmlerGeldi(msg dmPollResultMsg) (tea.Model, tea.Cmd) {
 	for _, dm := range msg.msgs {
 		if z, ok := zarfCoz(dm.Text); ok {
 			var cmd tea.Cmd
-			m, cmd = m.zarfIsle(z, dm.VerifiedPeerID)
+			m, cmd = m.zarfIsle(z, dm.VerifiedPeerID, time.Now())
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -175,7 +180,7 @@ func (m model) basitSonucGeldi(msg basitSonuc) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.notice, m.isErr = "Davet gönderilemedi: "+describeErr(msg.err), true
 		} else {
-			m.notice, m.isErr = "Davet gönderildi.", false
+			m.notice, m.isErr = "Davet gönderildi. Kişi çevrimdışıysa AND daveti bekletir, bağlandığında iletir.", false
 		}
 	case "pull_iste":
 		if msg.err != nil {
@@ -459,7 +464,6 @@ func (m model) tusaBasildi(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // girdiyeIlet, mesajı açık ekrandaki giriş kutusuna ya da görünüme iletir
 // (imleç yanıp sönmesi, yazılan karakterler, kaydırma).
 func (m model) girdiyeIlet(msg tea.Msg) (tea.Model, tea.Cmd) {
-
 	var cmd tea.Cmd
 	switch m.ekran {
 	case ekGrupOlustur:

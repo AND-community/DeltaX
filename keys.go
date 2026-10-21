@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/lucian95511/and/internal/pluginapi"
 )
 
 // pendingCmd, bir arka plan işlemini m.pending=true ile birlikte başlatan her
@@ -315,8 +318,18 @@ func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter", "ctrl+s":
 		peerID := strings.TrimSpace(m.uyeDavetIn.Value())
-		if peerID == "" {
+		switch {
+		case peerID == "":
 			m.notice, m.isErr = "Peer ID boş olamaz.", true
+			return m, nil
+		case !pluginapi.GecerliPeerID(peerID):
+			m.notice, m.isErr = "Bu bir Peer ID değil (12D3KooW… ile başlar; kişi kendi ID'sini Kimlik ekranından paylaşabilir).", true
+			return m, nil
+		case peerID == m.identity.PeerID:
+			m.notice, m.isErr = "Kendini davet edemezsin.", true
+			return m, nil
+		case m.aktifGrup.uyeMi(peerID):
+			m.notice, m.isErr = "Bu kişi zaten grubun üyesi.", true
 			return m, nil
 		}
 		if m.pending {
@@ -324,17 +337,12 @@ func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.pending = true
 		m.notice = ""
-		// bkz. gonderilenDavetler'in doc yorumu: mDavetYanit işleyicisi bu
-		// kaydı arar. İyimser olarak burada işaretleniyor (SendDM henüz
-		// başarılı olmasa da) — en kötü ihtimalle hiç kabul gelmeyecek bir
-		// giriş bellekte kalır, zararsız.
-		if m.gonderilenDavetler == nil {
-			m.gonderilenDavetler = map[string]map[string]bool{}
-		}
-		if m.gonderilenDavetler[m.aktifGrup.ID] == nil {
-			m.gonderilenDavetler[m.aktifGrup.ID] = map[string]bool{}
-		}
-		m.gonderilenDavetler[m.aktifGrup.ID][peerID] = true
+		// bkz. davetDefteri: mDavetYanit işleyicisi bu kaydı arar. İyimser
+		// olarak burada işaretleniyor (gönderim henüz bitmemiş olsa da) — en
+		// kötü ihtimalle hiç kabul gelmeyecek bir kayıt, süresi dolana kadar
+		// defterde kalır; zararsız.
+		m.gonderilenDavetler.ekle(m.aktifGrup.ID, peerID, time.Now())
+		m.gonderilenDavetler.kaydet(m.dataDir)
 		return m, pendingCmd(m, davetGonderCmd(m.client, peerID, *m.aktifGrup, m.kendiUye()))
 	}
 	var cmd tea.Cmd

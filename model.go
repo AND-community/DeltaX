@@ -178,7 +178,7 @@ type disaAktarSonucu struct {
 // ─── Model ────────────────────────────────────────────────────────────────────
 
 type model struct {
-	client   *pluginapi.Client
+	client   istemci
 	identity pluginapi.IdentityInfo
 	dataDir  string
 
@@ -202,16 +202,12 @@ type model struct {
 	bekleyenDavetler []bekleyenDavet
 	davetIdx         int
 
-	// gonderilenDavetler, bu oturumda hangi grup için hangi peer'a davet
-	// gönderdiğimizi izler (grupID -> peerID -> true) — mDavetYanit
-	// işleyicisi, bir "kabul" mesajını yalnızca gerçekten bu şekilde
-	// davet edilmiş bir peer'dan geliyorsa uygular; aksi halde hiç davet
-	// edilmemiş biri bile kendi kendine "kabul ettim" diyerek gruba
-	// katılabilirdi. Kasıtlı olarak yalnızca bellekte tutulur (yeniden
-	// başlatmada sıfırlanır) — kalıcı olmaması güvenli yönde başarısız
-	// olur: en kötü ihtimalle uygulama yeniden başlatıldıktan hemen sonra
-	// gelen meşru bir kabul reddedilir, davet tekrar gönderilebilir.
-	gonderilenDavetler map[string]map[string]bool
+	// gonderilenDavetler: mDavetYanit işleyicisi bir "kabul"ü yalnızca
+	// gerçekten davet edilmiş bir eşten gelirse uygular (bkz. davetDefteri).
+	gonderilenDavetler davetDefteri
+
+	// imlec: DM geçmişinde nereye kadar işlendiği (bkz. gecmis.go).
+	imlec dmImleci
 
 	projeler   []Proje
 	projeIdx   int
@@ -273,7 +269,7 @@ type model struct {
 	onayGeriEkran ekran
 }
 
-func newModel(c *pluginapi.Client, id pluginapi.IdentityInfo, dataDir string) model {
+func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {
 	grupAdIn := textinput.New()
 	grupAdIn.Placeholder = "Grup adı…"
 	grupAdIn.CharLimit = 80
@@ -334,7 +330,8 @@ func newModel(c *pluginapi.Client, id pluginapi.IdentityInfo, dataDir string) mo
 		cevrimici:          map[string]bool{},
 		spinner:            sp,
 		bekleyenDavetler:   davetleriYukle(dataDir),
-		gonderilenDavetler: map[string]map[string]bool{},
+		gonderilenDavetler: davetDefteriniOku(dataDir, time.Now()),
+		imlec:              imleciOku(dataDir),
 	}
 }
 
@@ -436,7 +433,7 @@ func (m model) kisayollarIcin(e ekran) []kisayol {
 func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		textinput.Blink,
-		dmPollCmd(m.client),
+		gecmisCekCmd(m.client, m.imlec.ID),
 		filePollCmd(m.client),
 		consentPollCmd(m.client),
 		peersPollCmd(m.client),
@@ -445,14 +442,14 @@ func (m model) Init() tea.Cmd {
 
 // ─── Async komutlar ───────────────────────────────────────────────────────────
 
-func dmPollCmd(c *pluginapi.Client) tea.Cmd {
+func dmPollCmd(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := c.PollDM()
 		return dmPollResultMsg{msgs: msgs, err: err}
 	}
 }
 
-func dmPollCmdAfter(c *pluginapi.Client) tea.Cmd {
+func dmPollCmdAfter(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(2 * time.Second)
 		msgs, err := c.PollDM()
@@ -460,14 +457,14 @@ func dmPollCmdAfter(c *pluginapi.Client) tea.Cmd {
 	}
 }
 
-func filePollCmd(c *pluginapi.Client) tea.Cmd {
+func filePollCmd(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := c.PollFile()
 		return filePollResultMsg{msgs: msgs, err: err}
 	}
 }
 
-func filePollCmdAfter(c *pluginapi.Client) tea.Cmd {
+func filePollCmdAfter(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(2 * time.Second)
 		msgs, err := c.PollFile()
@@ -475,21 +472,21 @@ func filePollCmdAfter(c *pluginapi.Client) tea.Cmd {
 	}
 }
 
-func consentPollCmd(c *pluginapi.Client) tea.Cmd {
+func consentPollCmd(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		reqs, err := c.PollConsent()
 		return consentPollResultMsg{reqs: reqs, err: err}
 	}
 }
 
-func peersPollCmd(c *pluginapi.Client) tea.Cmd {
+func peersPollCmd(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		peers, err := c.Peers()
 		return peersResultMsg{peers: peers, err: err}
 	}
 }
 
-func peersPollCmdAfter(c *pluginapi.Client) tea.Cmd {
+func peersPollCmdAfter(c istemci) tea.Cmd {
 	return func() tea.Msg {
 		time.Sleep(5 * time.Second)
 		peers, err := c.Peers()
@@ -497,7 +494,7 @@ func peersPollCmdAfter(c *pluginapi.Client) tea.Cmd {
 	}
 }
 
-func onayCmd(c *pluginapi.Client, transferID string, accept bool) tea.Cmd {
+func onayCmd(c istemci, transferID string, accept bool) tea.Cmd {
 	return func() tea.Msg {
 		return basitSonuc{islem: "onay", err: c.RespondConsent(transferID, accept)}
 	}
@@ -521,13 +518,13 @@ func grupOlusturCmd(dataDir, ad string, kendi Uye) tea.Cmd {
 	}
 }
 
-func davetGonderCmd(c *pluginapi.Client, hedefPeer string, g Grup, kendi Uye) tea.Cmd {
+func davetGonderCmd(c istemci, hedefPeer string, g Grup, kendi Uye) tea.Cmd {
 	return func() tea.Msg {
 		return basitSonuc{islem: "davet", err: davetGonder(c, hedefPeer, g, kendi)}
 	}
 }
 
-func kabulCmd(c *pluginapi.Client, dataDir string, davet bekleyenDavet, kendi Uye, kabul bool) tea.Cmd {
+func kabulCmd(c istemci, dataDir string, davet bekleyenDavet, kendi Uye, kabul bool) tea.Cmd {
 	return func() tea.Msg {
 		if !kabul {
 			return kabulSonucu{err: davetYanitGonder(c, davet.GonderenPeer, davet.GrupID, false, kendi)}
@@ -547,7 +544,7 @@ func kabulCmd(c *pluginapi.Client, dataDir string, davet bekleyenDavet, kendi Uy
 	}
 }
 
-func rosterYayinCmd(c *pluginapi.Client, g Grup, kendi Uye) tea.Cmd {
+func rosterYayinCmd(c istemci, g Grup, kendi Uye) tea.Cmd {
 	return func() tea.Msg {
 		if hatalar := uyeGuncellemesiYayinla(c, g, kendi); len(hatalar) > 0 {
 			return basitSonuc{islem: "roster", err: fmt.Errorf("%d üyeye ulaşılamadı", len(hatalar))}
@@ -561,7 +558,7 @@ func rosterYayinCmd(c *pluginapi.Client, g Grup, kendi Uye) tea.Cmd {
 // bilgilendirilir (en iyi çaba — ulaşılamayanlar agHatasi olarak
 // raporlanır), ardından grubun yerel kaydı silinir. Grubun proje verileri
 // (nesneler, çalışma klasörü) kasıtlı olarak diskte bırakılır.
-func grupTerkEtCmd(c *pluginapi.Client, dataDir string, g Grup, kendi Uye) tea.Cmd {
+func grupTerkEtCmd(c istemci, dataDir string, g Grup, kendi Uye) tea.Cmd {
 	return func() tea.Msg {
 		kapatildi := g.yetkiliMi(kendi.PeerID)
 		var agHatasi error
@@ -715,14 +712,14 @@ func disaAktarCmd(dataDir, projeID, projeAd, hedefKlasor string) tea.Cmd {
 	}
 }
 
-func pushCmd(c *pluginapi.Client, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBaslangic string) tea.Cmd {
+func pushCmd(c istemci, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBaslangic string) tea.Cmd {
 	return func() tea.Msg {
 		n, err := pushYap(c, dataDir, g, p, hedefUye, bilinenBaslangic)
 		return pushSonucu{hedefAd: hedefUye.Ad, nesneSayisi: n, err: err}
 	}
 }
 
-func pullIsteCmd(c *pluginapi.Client, hedefUye Uye, g Grup, p Proje, kendi Uye) tea.Cmd {
+func pullIsteCmd(c istemci, hedefUye Uye, g Grup, p Proje, kendi Uye) tea.Cmd {
 	return func() tea.Msg {
 		return basitSonuc{islem: "pull_iste", err: pullIste(c, hedefUye, g, p, kendi)}
 	}
@@ -792,7 +789,11 @@ func birlestirCmd(dataDir, projeID, calismaDir, yerelHead, uzakHead, yazar strin
 // kontrolünün yanı sıra, payload'ın iddia ettiği kimliğin verifiedSender'la
 // eşleştiğini de doğrular; aksi halde herhangi bir peer, payload'a başka
 // birinin (ör. gerçek kurucunun) peer ID'sini yazarak onun yerine geçebilir.
-func (m model) zarfIsle(z kontrolZarfi, verifiedSender string) (model, tea.Cmd) {
+//
+// alindi, mesajın bu düğüme ulaştığı andır (AND'ın kendi saatiyle; gönderen
+// bunu belirleyemez). DeltaX kapalıyken gelen mesajlar geçmişten sonradan
+// işlendiği için bazı türler yaşına göre atlanır.
+func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time) (model, tea.Cmd) {
 	switch z.Tip {
 	case mDavet, mUyeGuncelle:
 		var dp davetPayload
@@ -822,6 +823,10 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string) (model, tea.Cmd) 
 		if z.Tip == mUyeGuncelle {
 			return m, nil
 		}
+		// Davet eden, bu kadar eski bir davetin kabulünü artık tanımaz.
+		if time.Since(alindi) > davetGecerlilik {
+			return m, nil
+		}
 		for _, d := range m.bekleyenDavetler {
 			if d.GrupID == z.GrupID {
 				return m, nil
@@ -843,17 +848,21 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string) (model, tea.Cmd) 
 		// Bu grup için gerçekten bu peer'a bir davet gönderdiğimizi
 		// doğrula — aksi halde davet edilmemiş biri bile, kendi gerçek
 		// kimliğiyle "kabul ediyorum" diyerek gruba katılabilirdi (hiçbir
-		// zaman gönderilmemiş bir daveti "kabul etmek"). bkz.
-		// gonderilenDavetler'in doc yorumu.
-		if !m.gonderilenDavetler[z.GrupID][verifiedSender] {
+		// zaman gönderilmemiş bir daveti "kabul etmek"). bkz. davetDefteri.
+		if !m.gonderilenDavetler.gecerli(z.GrupID, verifiedSender, alindi) {
 			return m, nil
 		}
 		g, err := grupOku(m.dataDir, z.GrupID)
-		if err != nil || !g.yetkiliMi(m.identity.PeerID) || !yp.Kabul {
+		if err != nil || !g.yetkiliMi(m.identity.PeerID) {
 			return m, nil
 		}
-		if m.gonderilenDavetler[z.GrupID] != nil {
-			delete(m.gonderilenDavetler[z.GrupID], verifiedSender)
+		// Yanıt ne olursa olsun davet kullanılmıştır: reddeden biri sonradan
+		// aynı davetle "kabul" edemez.
+		m.gonderilenDavetler.sil(z.GrupID, verifiedSender)
+		m.gonderilenDavetler.kaydet(m.dataDir)
+		if !yp.Kabul {
+			m = m.bildirGuncelle(safe(yp.Uye.Ad)+" \""+safe(g.Ad)+"\" grubuna davetini reddetti.", false)
+			return m, nil
 		}
 		g.uyeEkleGuncelle(yp.Uye)
 		_ = grupKaydet(m.dataDir, g)
@@ -876,6 +885,11 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string) (model, tea.Cmd) 
 			return m, nil
 		}
 		if pp.Isteyen.PeerID != verifiedSender {
+			return m, nil
+		}
+		// Gönderim, isteyenin şu an çevrimiçi olmasını gerektirir: DeltaX
+		// kapalıyken gelmiş eski bir istek yanıtlanmaz.
+		if time.Since(alindi) > pullGecerlilik {
 			return m, nil
 		}
 		g, gerr := grupOku(m.dataDir, z.GrupID)

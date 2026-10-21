@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/lucian95511/and/internal/pluginapi"
 )
@@ -74,7 +75,7 @@ func TestZarfIsleSahteKurucudanRosterGuncellemesiniReddeder(t *testing.T) {
 	})
 
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-kurban"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, "peer-sahte")
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, "peer-sahte", time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -108,7 +109,7 @@ func TestZarfIsleGercekKurucudanRosterGuncellemesiniKabulEder(t *testing.T) {
 	})
 
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-kurban"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, gercek.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, gercek.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -150,7 +151,7 @@ func TestZarfIsleRosterGuncellemesiTaklitEdilenKurucudanReddeder(t *testing.T) {
 
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-kurban"}}
 	// DM aslında saldırganın kendi doğrulanmış kimliğinden geldi — kurucudan değil.
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, saldirgan.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mUyeGuncelle, GrupID: g.ID, Payload: payload}, saldirgan.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -177,7 +178,7 @@ func TestZarfIsleAyrilKurucuUyeyiRosterdenCikarir(t *testing.T) {
 
 	payload, _ := json.Marshal(ayrilPayload{Uye: ayrilan})
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: kurucu.PeerID}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mAyril, GrupID: g.ID, Payload: payload}, ayrilan.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mAyril, GrupID: g.ID, Payload: payload}, ayrilan.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -213,7 +214,7 @@ func TestZarfIsleAyrilBaskasiAdinaTaklitEdilerekKabulEtmez(t *testing.T) {
 	// ayrıldığını iddia eden bir mesaj gönderiyor.
 	payload, _ := json.Marshal(ayrilPayload{Uye: kurban})
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: kurucu.PeerID}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mAyril, GrupID: g.ID, Payload: payload}, saldirgan.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mAyril, GrupID: g.ID, Payload: payload}, saldirgan.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -236,7 +237,7 @@ func TestZarfIsleGrupKapatSahteKurucudanKabulEtmez(t *testing.T) {
 
 	payload, _ := json.Marshal(grupKapatPayload{Gonderen: Uye{PeerID: "peer-sahte"}})
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-uye"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, "peer-sahte")
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, "peer-sahte", time.Now())
 	_ = m
 
 	if _, err := grupOku(dataDir, g.ID); err != nil {
@@ -258,7 +259,7 @@ func TestZarfIsleGrupKapatTaklitEdilenKurucudanKabulEtmez(t *testing.T) {
 
 	payload, _ := json.Marshal(grupKapatPayload{Gonderen: kurucu}) // payload gerçek kurucu iddia ediyor
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-uye"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, "peer-saldirgan") // ama gerçek gönderen saldırgan
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, "peer-saldirgan", time.Now()) // ama gerçek gönderen saldırgan
 	_ = m
 
 	if _, err := grupOku(dataDir, g.ID); err != nil {
@@ -277,7 +278,7 @@ func TestZarfIsleGrupKapatGercekKurucudanGrubuSiler(t *testing.T) {
 
 	payload, _ := json.Marshal(grupKapatPayload{Gonderen: kurucu})
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-uye"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, kurucu.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, kurucu.PeerID, time.Now())
 	_ = m
 
 	if _, err := grupOku(dataDir, g.ID); err == nil {
@@ -299,7 +300,7 @@ func TestZarfIsleGrupKapatYoneticidenDeKabulEder(t *testing.T) {
 	// bir yönetici grubu kapatabilmeli (yedek kurucu senaryosu).
 	payload, _ := json.Marshal(grupKapatPayload{Gonderen: yonetici})
 	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: "peer-uye"}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, yonetici.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mGrupKapat, GrupID: g.ID, Payload: payload}, yonetici.PeerID, time.Now())
 	_ = m
 
 	if _, err := grupOku(dataDir, g.ID); err == nil {
@@ -325,8 +326,8 @@ func TestZarfIsleDavetYanitiDavetEdilmemisPeerKabulEtmez(t *testing.T) {
 
 	davetsiz := Uye{Ad: "davetsiz", PeerID: "peer-davetsiz"}
 	payload, _ := json.Marshal(davetYanitPayload{Kabul: true, Uye: davetsiz})
-	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: kurucu.PeerID}, gonderilenDavetler: map[string]map[string]bool{}}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, davetsiz.PeerID)
+	m := model{dataDir: dataDir, identity: pluginapi.IdentityInfo{PeerID: kurucu.PeerID}, gonderilenDavetler: davetDefteri{}}
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, davetsiz.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
@@ -352,9 +353,9 @@ func TestZarfIsleDavetYanitiGercekDaveteKabulEder(t *testing.T) {
 	m := model{
 		dataDir:            dataDir,
 		identity:           pluginapi.IdentityInfo{PeerID: kurucu.PeerID},
-		gonderilenDavetler: map[string]map[string]bool{g.ID: {davetli.PeerID: true}},
+		gonderilenDavetler: davetDefteri{g.ID: {davetli.PeerID: time.Now()}},
 	}
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, davetli.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, davetli.PeerID, time.Now())
 
 	sonra, err := grupOku(dataDir, g.ID)
 	if err != nil {
@@ -363,7 +364,7 @@ func TestZarfIsleDavetYanitiGercekDaveteKabulEder(t *testing.T) {
 	if !sonra.uyeMi(davetli.PeerID) {
 		t.Fatal("gerçekten davet edilmiş bir peer'ın kabulü uygulanmadı")
 	}
-	if m.gonderilenDavetler[g.ID][davetli.PeerID] {
+	if _, ok := m.gonderilenDavetler[g.ID][davetli.PeerID]; ok {
 		t.Fatal("kullanılan davet kaydı tüketilmeliydi (delete edilmeliydi)")
 	}
 }
@@ -386,10 +387,10 @@ func TestZarfIsleDavetYanitiTaklitEdilerekKabulEtmez(t *testing.T) {
 	m := model{
 		dataDir:            dataDir,
 		identity:           pluginapi.IdentityInfo{PeerID: kurucu.PeerID},
-		gonderilenDavetler: map[string]map[string]bool{g.ID: {davetli.PeerID: true}},
+		gonderilenDavetler: davetDefteri{g.ID: {davetli.PeerID: time.Now()}},
 	}
 	// ama DM gerçekte saldırgandan geldi
-	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, saldirgan.PeerID)
+	m, _ = m.zarfIsle(kontrolZarfi{Tip: mDavetYanit, GrupID: g.ID, Payload: payload}, saldirgan.PeerID, time.Now())
 	_ = m
 
 	sonra, err := grupOku(dataDir, g.ID)
