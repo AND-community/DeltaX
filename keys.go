@@ -41,7 +41,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case ekProjePaneli:
 		return m.keyProjePaneli(msg)
 	case ekDurum:
-		return m.keyGeri(msg, ekProjePaneli)
+		return m.keyDurum(msg)
+	case ekKayit:
+		return m.keyKayit(msg)
 	case ekCommitMesaj:
 		return m.keyCommitMesaj(msg)
 	case ekGunluk:
@@ -50,8 +52,6 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.keyDallar(msg)
 	case ekYeniDal:
 		return m.keyYeniDal(msg)
-	case ekDiffListesi:
-		return m.keyDiffListesi(msg)
 	case ekDiff:
 		return m.keyDiff(msg)
 	case ekGonderSecim:
@@ -280,6 +280,7 @@ func (m model) keyGrupPaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.uyeDavetIn.SetValue("")
 		m.uyeDavetIn.Focus()
+		m.oneriIdx = -1
 		m.notice = ""
 		m.ekran = ekUyeDavet
 	case "y", "Y":
@@ -303,10 +304,25 @@ func (m model) keyGrupPaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p := m.projeler[m.projeIdx]
 		m.aktifProje = &p
 		m.projePanelIdx = 0
+		m.ozet = nil // üst kart yeniden hesaplanıyor (bkz. Update)
 		m.notice = ""
 		m.ekran = ekProjePaneli
 	}
 	return m, nil
+}
+
+// davetOnerileri, davet edilebilecek bağlı AND düğümleridir (kendisi ve
+// grubun üyeleri hariç). Bağlı eşlerin çoğu genel DHT düğümüdür ve DeltaX
+// mesajı alamaz; AND bunları "and" bilgisiyle ayırır.
+func (m model) davetOnerileri() []pluginapi.PeerInfo {
+	var out []pluginapi.PeerInfo
+	for _, p := range m.esler {
+		if p.AND && p.PeerID != m.identity.PeerID && m.aktifGrup != nil && !m.aktifGrup.uyeMi(p.PeerID) {
+			out = append(out, p)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PeerID < out[j].PeerID })
+	return out
 }
 
 func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -315,6 +331,19 @@ func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "esc":
 		m.ekran = ekGrupPaneli
+		return m, nil
+	case "up", "down":
+		oneriler := m.davetOnerileri()
+		if len(oneriler) == 0 {
+			return m, nil
+		}
+		if msg.String() == "down" {
+			m.oneriIdx = (m.oneriIdx + 1) % len(oneriler)
+		} else {
+			m.oneriIdx = (m.oneriIdx - 1 + len(oneriler)) % len(oneriler)
+		}
+		m.uyeDavetIn.SetValue(oneriler[m.oneriIdx].PeerID)
+		m.uyeDavetIn.CursorEnd()
 		return m, nil
 	case "enter", "ctrl+s":
 		peerID := strings.TrimSpace(m.uyeDavetIn.Value())
@@ -428,29 +457,11 @@ func (m model) keyProjeOlustur(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ─── Proje paneli ───────────────────────────────────────────────────────────
 
-func (m model) projePanelSecenekleri() []string {
-	return []string{
-		"Durum",
-		"Kaydet (Commit)",
-		"Günlük",
-		"Dallar",
-		"Fark (Diff)",
-		"Gönder (Push)",
-		"Uzak Dallar (Birleştir)",
-		"Üyeden Çek İste (Pull)",
-		"Dosyalar (Düzenle)",
-		"Çalışma Klasörünü Aç",
-		"Dışa Aktar (.zip)",
-		"Geri",
-	}
-}
-
 func (m model) keyProjePaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	opts := m.projePanelSecenekleri()
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
-	case "esc":
+	case "esc", "q":
 		m.ekran = ekGrupPaneli
 		return m, nil
 	case "up", "k":
@@ -458,62 +469,130 @@ func (m model) keyProjePaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.projePanelIdx--
 		}
 	case "down", "j":
-		if m.projePanelIdx < len(opts)-1 {
+		if m.projePanelIdx < len(projeIslemleri)-1 {
 			m.projePanelIdx++
 		}
 	case "enter":
-		switch opts[m.projePanelIdx] {
-		case "Durum":
-			m.durumSonraki = ekDurum
-			m.pending = true
-			return m, pendingCmd(m, durumCmd(m.dataDir, m.aktifProje.ID, m.calismaDir(), m.aktifProje.Dallar[m.aktifProje.AktifDal]))
-		case "Kaydet (Commit)":
-			m.commitMsgIn.SetValue("")
-			m.commitMsgIn.Focus()
-			m.notice = ""
-			m.ekran = ekCommitMesaj
-		case "Günlük":
-			m.pending = true
-			return m, pendingCmd(m, gunlukCmd(m.dataDir, m.aktifProje.ID, m.aktifProje.Dallar[m.aktifProje.AktifDal]))
-		case "Dallar":
-			m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
-			m.dalIdx = max0(indexOf(m.dallar, m.aktifProje.AktifDal))
-			m.ekran = ekDallar
-		case "Fark (Diff)":
-			m.durumSonraki = ekDiffListesi
-			m.pending = true
-			return m, pendingCmd(m, durumCmd(m.dataDir, m.aktifProje.ID, m.calismaDir(), m.aktifProje.Dallar[m.aktifProje.AktifDal]))
-		case "Gönder (Push)":
-			m.uyelerHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
-			m.pushIdx = 0
-			m.notice = ""
-			m.ekran = ekGonderSecim
-		case "Uzak Dallar (Birleştir)":
-			m.uzakAnahtarlari = uzakAnahtarlariSirali(m.aktifProje.Uzaklar)
-			m.uzakIdx = 0
-			m.notice = ""
-			m.ekran = ekUzakDallar
-		case "Üyeden Çek İste (Pull)":
-			m.uyelerHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
-			m.pullIdx = 0
-			m.notice = ""
-			m.ekran = ekPullIste
-		case "Dosyalar (Düzenle)":
-			m.pending = true
-			return m, pendingCmd(m, dosyaListesiCmd(m.calismaDir()))
-		case "Çalışma Klasörünü Aç":
-			if err := klasoruAc(m.calismaDir()); err != nil {
-				m.notice, m.isErr = "Klasör açılamadı: "+describeErr(err), true
-			} else {
-				m.notice, m.isErr = "Klasör açıldı: "+m.calismaDir(), false
+		return m.projeIsleminiCalistir(projeIslemleri[m.projePanelIdx].tus)
+	default:
+		for i, is := range projeIslemleri {
+			if msg.String() == is.tus {
+				m.projePanelIdx = i
+				return m.projeIsleminiCalistir(is.tus)
 			}
-		case "Dışa Aktar (.zip)":
-			m.disaAktarIn.Focus()
-			m.notice = ""
-			m.ekran = ekDisaAktar
-		case "Geri":
-			m.ekran = ekGrupPaneli
 		}
+	}
+	return m, nil
+}
+
+// projeIsleminiCalistir, proje panelindeki bir işlemi kısayol tuşuyla çalıştırır (bkz. projeIslemleri).
+func (m model) projeIsleminiCalistir(tus string) (tea.Model, tea.Cmd) {
+	if m.pending {
+		return m, nil
+	}
+	p := m.aktifProje
+	head := p.Dallar[p.AktifDal]
+	m.notice = ""
+	switch tus {
+	case "d":
+		m.durumIdx = 0
+		m.pending = true
+		return m, pendingCmd(m, durumCmd(m.dataDir, p.ID, m.calismaDir(), head))
+	case "c":
+		return m.commitEkraniniAc()
+	case "l":
+		m.pending = true
+		return m, pendingCmd(m, gunlukCmd(m.dataDir, p.ID, head))
+	case "b":
+		m.dallar = dalAnahtarlari(p.Dallar)
+		m.dalIdx = max0(indexOf(m.dallar, p.AktifDal))
+		m.dalSon = map[string]LogGirdisi{}
+		for _, d := range m.dallar {
+			if k := gunlukAl(m.dataDir, p.ID, p.Dallar[d], 1); len(k) > 0 {
+				m.dalSon[d] = k[0]
+			}
+		}
+		m.ekran = ekDallar
+	case "p":
+		m.uyelerHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
+		m.pushIdx = 0
+		m.ekran = ekGonderSecim
+	case "m":
+		m.uzakAnahtarlari = uzakAnahtarlariSirali(p.Uzaklar)
+		m.uzakIdx = 0
+		m.ekran = ekUzakDallar
+	case "u":
+		m.uyelerHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
+		m.pullIdx = 0
+		m.ekran = ekPullIste
+	case "f":
+		m.pending = true
+		return m, pendingCmd(m, dosyaListesiCmd(m.calismaDir()))
+	case "o":
+		if err := klasoruAc(m.calismaDir()); err != nil {
+			m.notice, m.isErr = "Klasör açılamadı: "+describeErr(err), true
+		} else {
+			m.notice, m.isErr = "Klasör açıldı: "+m.calismaDir(), false
+		}
+	case "e":
+		m.disaAktarIn.Focus()
+		m.ekran = ekDisaAktar
+	}
+	return m, nil
+}
+
+func (m model) commitEkraniniAc() (tea.Model, tea.Cmd) {
+	m.commitMsgIn.SetValue("")
+	m.commitMsgIn.Focus()
+	m.notice = ""
+	m.ekran = ekCommitMesaj
+	return m, nil
+}
+
+// ─── Değişiklikler (durum, fark, geri alma) ─────────────────────────────────
+
+func (m model) keyDurum(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	liste := degisiklikListesi(m.durum)
+	p := m.aktifProje
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc", "q":
+		m.ekran = ekProjePaneli
+	case "up", "k":
+		if m.durumIdx > 0 {
+			m.durumIdx--
+		}
+	case "down", "j":
+		if m.durumIdx < len(liste)-1 {
+			m.durumIdx++
+		}
+	case "r":
+		if !m.pending {
+			m.pending = true
+			return m, pendingCmd(m, durumCmd(m.dataDir, p.ID, m.calismaDir(), p.Dallar[p.AktifDal]))
+		}
+	case "c":
+		if len(liste) == 0 {
+			m.notice, m.isErr = "Kaydedilecek değişiklik yok.", false
+			return m, nil
+		}
+		return m.commitEkraniniAc()
+	case "enter":
+		if len(liste) == 0 || m.pending {
+			return m, nil
+		}
+		yol := liste[m.durumIdx].Yol
+		m.diffBaslik, m.diffGeri = yol, ekDurum
+		m.pending = true
+		return m, pendingCmd(m, diffCmd(m.dataDir, p.ID, m.calismaDir(), p.Dallar[p.AktifDal], yol))
+	case "g":
+		if len(liste) == 0 || m.pending {
+			return m, nil
+		}
+		m.geriAlYol = liste[m.durumIdx].Yol
+		m.onayTip, m.onayGeriEkran = onayGeriAl, ekDurum
+		m.ekran = ekOnay
 	}
 	return m, nil
 }
@@ -588,39 +667,105 @@ func (m model) keyCommitMesaj(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ─── Günlük ─────────────────────────────────────────────────────────────────
 
+// gunlukGorunur, aramaya göre süzülmüş kayıtlardır.
+func (m model) gunlukGorunur() []LogGirdisi {
+	return gunlukFiltrele(m.gunluk, m.gunlukAramaIn.Value())
+}
+
 func (m model) keyGunluk(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	gorunur := m.gunlukGorunur()
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "up":
+		if m.gunlukIdx > 0 {
+			m.gunlukIdx--
+		}
+		return m, nil
+	case "down":
+		if m.gunlukIdx < len(gorunur)-1 {
+			m.gunlukIdx++
+		}
+		return m, nil
+	case "pgup":
+		m.gunlukIdx = max0(m.gunlukIdx - 10)
+		return m, nil
+	case "pgdown":
+		m.gunlukIdx = max0(min(m.gunlukIdx+10, len(gorunur)-1))
+		return m, nil
+	case "enter":
+		if len(gorunur) == 0 || m.pending {
+			return m, nil
+		}
+		m.gunlukAramaIn.Blur()
+		m.gunlukAramaAktif = false
+		m.pending = true
+		return m, pendingCmd(m, kayitCmd(m.dataDir, m.aktifProje.ID, gorunur[m.gunlukIdx].Hash))
+	}
 	if m.gunlukAramaAktif {
-		switch msg.String() {
-		case "ctrl+c":
-			return m, tea.Quit
-		case "esc":
+		if msg.String() == "esc" {
 			m.gunlukAramaAktif = false
 			m.gunlukAramaIn.SetValue("")
 			m.gunlukAramaIn.Blur()
-			m.gunlukVP.SetContent(gunlukMetni(m.gunluk))
-			m.gunlukVP.GotoTop()
+			m.gunlukIdx = 0
 			return m, nil
 		}
 		var cmd tea.Cmd
 		m.gunlukAramaIn, cmd = m.gunlukAramaIn.Update(msg)
-		m.gunlukVP.SetContent(gunlukMetni(gunlukFiltrele(m.gunluk, m.gunlukAramaIn.Value())))
-		m.gunlukVP.GotoTop()
+		m.gunlukIdx = 0
 		return m, cmd
 	}
+	switch msg.String() {
+	case "esc", "q":
+		m.ekran = ekProjePaneli
+	case "k":
+		if m.gunlukIdx > 0 {
+			m.gunlukIdx--
+		}
+	case "j":
+		if m.gunlukIdx < len(gorunur)-1 {
+			m.gunlukIdx++
+		}
+	case "/":
+		m.gunlukAramaAktif = true
+		m.gunlukAramaIn.Focus()
+	}
+	return m, nil
+}
+
+// ─── Kayıt ayrıntısı ────────────────────────────────────────────────────────
+
+func (m model) keyKayit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	k := &m.kayit
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc", "q":
-		m.ekran = ekProjePaneli
-		return m, nil
-	case "/":
-		m.gunlukAramaAktif = true
-		m.gunlukAramaIn.Focus()
-		return m, nil
+		m.ekran = ekGunluk
+	case "up", "k":
+		if k.idx > 0 {
+			k.idx--
+		}
+	case "down", "j":
+		if k.idx < len(k.degisiklikler)-1 {
+			k.idx++
+		}
+	case "enter":
+		if len(k.degisiklikler) == 0 || m.pending {
+			return m, nil
+		}
+		yol := k.degisiklikler[k.idx].Yol
+		m.diffBaslik, m.diffGeri = yol, ekKayit
+		m.pending = true
+		return m, pendingCmd(m, kayitDiffCmd(m.dataDir, m.aktifProje.ID, k.hash, yol))
+	case "b":
+		m.dalKaynak = k.hash
+		m.yeniDalIn.SetValue("")
+		m.yeniDalIn.Focus()
+		m.notice = ""
+		m.ekran = ekYeniDal
 	}
-	var cmd tea.Cmd
-	m.gunlukVP, cmd = m.gunlukVP.Update(msg)
-	return m, cmd
+	return m, nil
 }
 
 // ─── Dallar ─────────────────────────────────────────────────────────────────
@@ -640,10 +785,21 @@ func (m model) keyDallar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.dalIdx++
 		}
 	case "n", "N":
+		m.dalKaynak = ""
 		m.yeniDalIn.SetValue("")
 		m.yeniDalIn.Focus()
 		m.notice = ""
 		m.ekran = ekYeniDal
+	case "d", "D":
+		if len(m.dallar) == 0 || m.pending {
+			return m, nil
+		}
+		if m.dallar[m.dalIdx] == m.aktifProje.AktifDal {
+			m.notice, m.isErr = "Etkin dal silinemez; önce başka bir dala geç.", true
+			return m, nil
+		}
+		m.onayTip, m.onayGeriEkran = onayDalSil, ekDallar
+		m.ekran = ekOnay
 	case "enter":
 		if len(m.dallar) == 0 {
 			return m, nil
@@ -662,12 +818,31 @@ func (m model) keyDallar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// dalSil, etkin olmayan bir dalı siler. Kayıtlar nesne deposunda kalır;
+// yalnızca dalın adı (ucu) kaldırılır.
+func (m model) dalSil(ad string) model {
+	delete(m.aktifProje.Dallar, ad)
+	if err := projeKaydet(m.dataDir, *m.aktifProje); err != nil {
+		m.notice, m.isErr = "Dal silinemedi: "+describeErr(err), true
+		return m
+	}
+	delete(m.dalSon, ad)
+	m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
+	m.dalIdx = max0(min(m.dalIdx, len(m.dallar)-1))
+	m.notice, m.isErr = "Dal silindi: "+ad+" (kayıtları geçmişte durur).", false
+	return m
+}
+
 func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc":
-		m.ekran = ekDallar
+		if m.dalKaynak != "" {
+			m.ekran = ekKayit
+		} else {
+			m.ekran = ekDallar
+		}
 		return m, nil
 	case "enter", "ctrl+s":
 		ad := strings.TrimSpace(m.yeniDalIn.Value())
@@ -675,15 +850,37 @@ func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.notice, m.isErr = "Dal adı boş olamaz.", true
 			return m, nil
 		}
+		if strings.ContainsAny(ad, "/\\ \t") {
+			m.notice, m.isErr = "Dal adında boşluk ya da eğik çizgi olamaz.", true
+			return m, nil
+		}
 		if _, varMi := m.aktifProje.Dallar[ad]; varMi {
 			m.notice, m.isErr = "Bu isimde bir dal zaten var.", true
 			return m, nil
 		}
-		m.aktifProje.Dallar[ad] = m.aktifProje.Dallar[m.aktifProje.AktifDal]
-		_ = projeKaydet(m.dataDir, *m.aktifProje)
+		kaynak := m.dalKaynak
+		if kaynak == "" {
+			kaynak = m.aktifProje.Dallar[m.aktifProje.AktifDal]
+		}
+		m.aktifProje.Dallar[ad] = kaynak
+		if err := projeKaydet(m.dataDir, *m.aktifProje); err != nil {
+			delete(m.aktifProje.Dallar, ad)
+			m.notice, m.isErr = "Dal oluşturulamadı: "+describeErr(err), true
+			return m, nil
+		}
 		m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
 		m.dalIdx = max0(indexOf(m.dallar, ad))
-		m.notice, m.isErr = "Dal oluşturuldu: "+ad, false
+		if m.dalSon == nil {
+			m.dalSon = map[string]LogGirdisi{}
+		}
+		if k := gunlukAl(m.dataDir, m.aktifProje.ID, kaynak, 1); len(k) > 0 {
+			m.dalSon[ad] = k[0]
+		}
+		m.notice, m.isErr = "Dal oluşturuldu: "+ad+" (geçmek için enter).", false
+		if m.dalKaynak != "" {
+			m.notice = "Dal oluşturuldu: " + ad + " — " + kisaHash(kaynak) + " kaydından başlıyor (geçmek için enter)."
+		}
+		m.dalKaynak = ""
 		m.ekran = ekDallar
 		return m, nil
 	}
@@ -694,38 +891,12 @@ func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // ─── Fark (Diff) ────────────────────────────────────────────────────────────
 
-func (m model) keyDiffListesi(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "ctrl+c":
-		return m, tea.Quit
-	case "esc", "q":
-		m.ekran = ekProjePaneli
-	case "up", "k":
-		if m.diffIdx > 0 {
-			m.diffIdx--
-		}
-	case "down", "j":
-		if m.diffIdx < len(m.diffDosyalar)-1 {
-			m.diffIdx++
-		}
-	case "enter":
-		if len(m.diffDosyalar) == 0 {
-			return m, nil
-		}
-		yol := m.diffDosyalar[m.diffIdx]
-		m.diffBaslik = yol
-		m.pending = true
-		return m, pendingCmd(m, diffCmd(m.dataDir, m.aktifProje.ID, m.calismaDir(), m.aktifProje.Dallar[m.aktifProje.AktifDal], yol))
-	}
-	return m, nil
-}
-
 func (m model) keyDiff(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc", "q":
-		m.ekran = ekDiffListesi
+		m.ekran = m.diffGeri
 		return m, nil
 	}
 	var cmd tea.Cmd
@@ -828,6 +999,23 @@ func (m model) keyPullIste(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.pullIdx < len(m.uyelerHar)-1 {
 			m.pullIdx++
 		}
+	case "a", "A":
+		if m.pending {
+			return m, nil
+		}
+		var cmds []tea.Cmd
+		for _, u := range m.uyelerHar {
+			if m.cevrimici[u.PeerID] {
+				cmds = append(cmds, pullIsteCmd(m.client, u, *m.aktifGrup, *m.aktifProje, m.kendiUye()))
+			}
+		}
+		if len(cmds) == 0 {
+			m.notice, m.isErr = "Çevrimiçi üye yok.", true
+			return m, nil
+		}
+		m.pending = true
+		m.notice, m.isErr = fmt.Sprintf("%d çevrimiçi üyeden değişiklikleri isteniyor…", len(cmds)), false
+		return m, tea.Batch(append(cmds, m.spinner.Tick)...)
 	case "enter":
 		if len(m.uyelerHar) == 0 {
 			return m, nil
@@ -893,6 +1081,13 @@ func (m model) keyOnay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			uzakHash := m.aktifProje.Uzaklar[anahtar]
 			yerelHead := m.aktifProje.Dallar[m.aktifProje.AktifDal]
 			return m, pendingCmd(m, birlestirCmd(m.dataDir, m.aktifProje.ID, m.calismaDir(), yerelHead, uzakHash, m.identity.Name))
+		case onayGeriAl:
+			p := m.aktifProje
+			return m, pendingCmd(m, geriAlCmd(m.dataDir, p.ID, m.calismaDir(), p.Dallar[p.AktifDal], m.geriAlYol))
+		case onayDalSil:
+			m.pending = false
+			m.ekran = ekDallar
+			return m.dalSil(m.dallar[m.dalIdx]), nil
 		}
 		m.pending = false
 		return m, nil

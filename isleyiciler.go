@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -18,8 +17,43 @@ import (
 	"github.com/lucian95511/and/internal/ui"
 )
 
+// Update, mesajı işler; ardından bir ekrana yeni girildiyse o ekranın
+// özetini tazeler: proje paneline her girişte üst kart (son kayıt, durum,
+// uzak uçlar) yeniden hesaplanır, ana menüye ve grup paneline dönüşte
+// sayılar ve son kayıtlar güncellenir. Böylece her alt ekranın dönüş yolu
+// bunu ayrı ayrı hatırlamak zorunda kalmaz.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	onceki := m.ekran
+	sonuc, cmd := m.guncelle(msg)
+	yeni, ok := sonuc.(model)
+	if !ok || yeni.ekran == onceki {
+		return sonuc, cmd
+	}
+	switch yeni.ekran {
+	case ekProjePaneli:
+		if yeni.aktifProje != nil {
+			return yeni, tea.Batch(cmd, projeOzetiCmd(yeni.dataDir, *yeni.aktifProje, yeni.calismaDir()))
+		}
+	case ekGrupPaneli:
+		yeni.projeSonKayit = sonKayitlari(yeni.dataDir, yeni.projeler)
+	case ekAnaMenu:
+		yeni.gruplar = gruplariListele(yeni.dataDir)
+		return yeni, tea.Batch(cmd, sonKayitlarCmd(yeni.dataDir))
+	}
+	return yeni, cmd
+}
+
+func (m model) guncelle(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case projeOzetiSonucu:
+		return m.projeOzetiGeldi(msg)
+	case kayitSonucu:
+		return m.kayitGeldi(msg)
+	case geriAlSonucu:
+		return m.geriAlindi(msg)
+	case sonKayitlarSonucu:
+		m.sonKayitlar = msg.kayitlar
+		return m, nil
 	case tea.WindowSizeMsg:
 		return m.boyutDegisti(msg)
 	case spinner.TickMsg:
@@ -76,11 +110,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) boyutDegisti(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.w, m.h = msg.Width, msg.Height
-	// Ekranlar tam ekran çerçevede (bkz. tamEkran): kenarlık ve dolgu
-	// düşülür; başlık, ayraç ve kısayol satırı için de yer bırakılır.
-	cw, ch := ui.ContentWidth(msg.Width), max(msg.Height-12, 3)
-	m.gunlukVP.Width = cw
-	m.gunlukVP.Height = ch
+	// Ekranlar tam ekran çerçevede (bkz. View): kenarlık ve dolgu düşülür;
+	// başlık, fark özeti, bildirim ve kısayol satırı için de yer bırakılır.
+	cw, ch := ui.ContentWidth(msg.Width), max(ui.ContentHeight(msg.Height)-9, 3)
 	m.diffVP.Width = cw
 	m.diffVP.Height = ch
 	m.dosyaDuzenleTA.SetWidth(cw)
@@ -144,6 +176,10 @@ func (m model) dosyalarGeldi(msg filePollResultMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m = m.bildirGuncelle(fmt.Sprintf("%d yeni nesne alındı (%s) — Uzak Dallar'dan birleştirebilirsin.", sayisi, safe(manifest.Dal)), false)
+		if m.ekran == ekProjePaneli && m.aktifProje != nil && m.aktifProje.ID == projeID {
+			// Üst karttaki "yeni kayıt" sayıları güncellensin.
+			return m, tea.Batch(filePollCmd(m.client), projeOzetiCmd(m.dataDir, *m.aktifProje, m.calismaDir()))
+		}
 	}
 	return m, filePollCmd(m.client)
 }
@@ -169,6 +205,7 @@ func (m model) eslerGeldi(msg peersResultMsg) (tea.Model, tea.Cmd) {
 			nc[p.PeerID] = true
 		}
 		m.cevrimici = nc
+		m.esler = msg.peers
 	}
 	return m, peersPollCmdAfter(m.client)
 }
@@ -246,18 +283,66 @@ func (m model) durumGeldi(msg durumSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.durum = msg.durum
-	if m.durumSonraki == ekDiffListesi {
-		var dosyalar []string
-		dosyalar = append(dosyalar, msg.durum.Degisen...)
-		dosyalar = append(dosyalar, msg.durum.Eklenen...)
-		sort.Strings(dosyalar)
-		m.diffDosyalar = dosyalar
-		m.diffIdx = 0
-		m.ekran = ekDiffListesi
-		return m, nil
+	if n := len(degisiklikListesi(m.durum)); m.durumIdx >= n {
+		m.durumIdx = max0(n - 1)
 	}
 	m.ekran = ekDurum
 	return m, nil
+}
+
+// degisiklikListesi, Değişiklikler ekranının satırlarıdır: önce değişen,
+// sonra eklenen, sonra silinen dosyalar.
+func degisiklikListesi(d DurumSonucu) []DosyaDegisikligi {
+	var out []DosyaDegisikligi
+	for _, y := range d.Degisen {
+		out = append(out, DosyaDegisikligi{y, '~'})
+	}
+	for _, y := range d.Eklenen {
+		out = append(out, DosyaDegisikligi{y, '+'})
+	}
+	for _, y := range d.Silinen {
+		out = append(out, DosyaDegisikligi{y, '-'})
+	}
+	return out
+}
+
+func (m model) projeOzetiGeldi(msg projeOzetiSonucu) (tea.Model, tea.Cmd) {
+	if m.aktifProje == nil || msg.ozet.projeID != m.aktifProje.ID {
+		return m, nil
+	}
+	oz := msg.ozet
+	m.ozet = &oz
+	return m, nil
+}
+
+func (m model) kayitGeldi(msg kayitSonucu) (tea.Model, tea.Cmd) {
+	m.pending = false
+	if !m.projeSonucuGuncelMi(msg.projeID) {
+		return m, nil
+	}
+	if msg.err != nil {
+		m.notice, m.isErr = "Kayıt okunamadı: "+describeErr(msg.err), true
+		return m, nil
+	}
+	m.kayit = msg.detay
+	m.notice = ""
+	m.ekran = ekKayit
+	return m, nil
+}
+
+func (m model) geriAlindi(msg geriAlSonucu) (tea.Model, tea.Cmd) {
+	m.pending = false
+	if !m.projeSonucuGuncelMi(msg.projeID) {
+		return m, nil
+	}
+	m.ekran = ekDurum
+	if msg.err != nil {
+		m.notice, m.isErr = "Geri alınamadı: "+describeErr(msg.err), true
+	} else {
+		m.notice, m.isErr = msg.yol+" son kayıttaki hâline döndü.", false
+	}
+	p := m.aktifProje
+	return m, durumCmd(m.dataDir, p.ID, m.calismaDir(), p.Dallar[p.AktifDal])
 }
 
 func (m model) commitBitti(msg commitSonucu) (tea.Model, tea.Cmd) {
@@ -285,11 +370,10 @@ func (m model) commitBitti(msg commitSonucu) (tea.Model, tea.Cmd) {
 func (m model) gunlukGeldi(msg gunlukSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	m.gunluk = msg.girdiler
+	m.gunlukIdx = 0
 	m.gunlukAramaAktif = false
 	m.gunlukAramaIn.SetValue("")
 	m.gunlukAramaIn.Blur()
-	m.gunlukVP.SetContent(gunlukMetni(msg.girdiler))
-	m.gunlukVP.GotoTop()
 	m.ekran = ekGunluk
 	return m, nil
 }
@@ -318,11 +402,12 @@ func (m model) diffGeldi(msg diffSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
 		m.notice, m.isErr = describeErr(msg.err), true
-		m.ekran = ekDiffListesi
 		return m, nil
 	}
+	m.diffEklenen, m.diffSilinen = diffSay(msg.satirlar)
 	m.diffVP.SetContent(diffMetni(msg.satirlar))
 	m.diffVP.GotoTop()
+	m.notice = ""
 	m.ekran = ekDiff
 	return m, nil
 }
@@ -483,8 +568,6 @@ func (m model) girdiyeIlet(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ekGunluk:
 		if m.gunlukAramaAktif {
 			m.gunlukAramaIn, cmd = m.gunlukAramaIn.Update(msg)
-		} else {
-			m.gunlukVP, cmd = m.gunlukVP.Update(msg)
 		}
 	case ekDiff:
 		m.diffVP, cmd = m.diffVP.Update(msg)

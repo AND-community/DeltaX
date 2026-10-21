@@ -1,508 +1,888 @@
 package main
 
-// view.go — tüm ekranların görüntü (render) mantığı.
+// view.go — ekranların görünümü. Görsel dil AND'ın kendisiyle ortaktır
+// (internal/ui): tam ekran çerçeve, konum izli başlık çubuğu, seçim
+// çubuklu liste satırları, satır içi bildirimler ve altta kısayol satırı.
+// Her ekran gövdesini ve kısayollarını döndürür; çerçeveyi View kurar.
+// Onay, dosya isteği ve yardım kutuları ekranın ortasında açılır.
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/lucian95511/and/internal/ui"
 )
 
-// View, ekranları AND'ın tam ekran çerçevesine (ui.Page) koyar. Onay ve
-// yardım kutuları ekranın ortasında açılan diyaloglar olarak kalır.
+// icW, tam ekran çerçevenin içerik genişliğidir.
+func (m model) icW() int {
+	if m.w <= 0 {
+		return 72
+	}
+	return ui.ContentWidth(m.w)
+}
+
+// govdeYuksekligi, başlık çubuğu ve alt bilgi dışında gövdeye kalan satır sayısıdır.
+func (m model) govdeYuksekligi() int {
+	if m.h <= 0 {
+		return 20
+	}
+	return max(ui.ContentHeight(m.h)-7, 4)
+}
+
 func (m model) View() string {
 	switch m.ekran {
-	case ekDosyaOnay, ekOnay, ekYardim:
-		return m.ekranGorunumu()
-	}
-	return tamEkran(m.w, m.h, m.ekranGorunumu())
-}
-
-// tamEkran, bir ekran görünümünü tam ekran çerçeveye yerleştirir. Her
-// görünümün SON satırı eski biçimli kısayol satırıdır ("↑/↓ seç   esc geri");
-// o satır ayrılıp AND'ın kısayol satırı biçiminde ekranın en altına konur.
-func tamEkran(w, h int, icerik string) string {
-	icerik = strings.TrimRight(icerik, "\n")
-	govde, son := "", icerik
-	if i := strings.LastIndex(icerik, "\n"); i >= 0 {
-		govde, son = icerik[:i], icerik[i+1:]
-	}
-	iw := 72
-	if w > 0 {
-		iw = ui.ContentWidth(w)
-	}
-	alt := ui.Divider(iw) + "\n" + ui.KeyHints(iw, ui.ParseHints(ansi.Strip(son))...)
-	return ui.Page(w, h, govde, alt)
-}
-
-func (m model) ekranGorunumu() string {
-	switch m.ekran {
-	case ekAnaMenu:
-		return m.viewAnaMenu()
-	case ekKimlik:
-		return m.viewKimlik()
-	case ekGrupListesi:
-		return m.viewGrupListesi()
-	case ekGrupOlustur:
-		return m.viewGrupOlustur()
-	case ekGrupPaneli:
-		return m.viewGrupPaneli()
-	case ekUyeDavet:
-		return m.viewUyeDavet()
-	case ekDavetler:
-		return m.viewDavetler()
-	case ekProjeOlustur:
-		return m.viewProjeOlustur()
-	case ekProjePaneli:
-		return m.viewProjePaneli()
-	case ekDurum:
-		return m.viewDurum()
-	case ekCommitMesaj:
-		return m.viewCommitMesaj()
-	case ekGunluk:
-		return m.viewGunluk()
-	case ekDallar:
-		return m.viewDallar()
-	case ekYeniDal:
-		return m.viewYeniDal()
-	case ekDiffListesi:
-		return m.viewDiffListesi()
-	case ekDiff:
-		return m.viewDiff()
-	case ekGonderSecim:
-		return m.viewGonderSecim()
-	case ekUzakDallar:
-		return m.viewUzakDallar()
-	case ekPullIste:
-		return m.viewPullIste()
 	case ekDosyaOnay:
 		return m.viewDosyaOnay()
 	case ekOnay:
 		return m.viewOnay()
-	case ekYoneticiSecim:
-		return m.viewYoneticiSecim()
-	case ekDosyaListesi:
-		return m.viewDosyaListesi()
-	case ekYeniDosya:
-		return m.viewYeniDosya()
-	case ekDosyaDuzenle:
-		return m.viewDosyaDuzenle()
-	case ekDisaAktar:
-		return m.viewDisaAktar()
 	case ekYardim:
 		return m.viewYardim()
 	}
-	return ""
+	w := m.icW()
+	govde, ipuclari := m.govde(w)
+	if len(m.kisayollarIcin(m.ekran)) > 0 {
+		ipuclari = append(ipuclari, ui.H("?", "yardım"))
+	}
+
+	var b strings.Builder
+	b.WriteString(ui.Header(w, m.konumIzi(), m.baslikSag()) + "\n\n")
+	b.WriteString(govde)
+
+	var f strings.Builder
+	f.WriteString(ui.Divider(w) + "\n")
+	if s := m.durumSatiri(); s != "" {
+		f.WriteString(ui.Truncate(s, w) + "\n")
+	}
+	f.WriteString(ui.KeyHints(w, ipuclari...))
+	return ui.Page(m.w, m.h, b.String(), f.String())
 }
 
-func (m model) yazBildirim(sb *strings.Builder) {
-	if m.notice == "" {
-		return
+func (m model) govde(w int) (string, []ui.Hint) {
+	switch m.ekran {
+	case ekAnaMenu:
+		return m.viewAnaMenu(w)
+	case ekKimlik:
+		return m.viewKimlik(w)
+	case ekGrupListesi:
+		return m.viewGrupListesi(w)
+	case ekGrupOlustur:
+		return m.viewGirdi("Grup adını yaz. Grup için rastgele bir AES-256 anahtarı üretilir; yalnızca davet ettiğin üyeler bilir.",
+			m.grupAdIn.View(), ui.H("enter", "oluştur"), ui.H("esc", "vazgeç"))
+	case ekGrupPaneli:
+		return m.viewGrupPaneli(w)
+	case ekUyeDavet:
+		return m.viewUyeDavet(w)
+	case ekDavetler:
+		return m.viewDavetler(w)
+	case ekProjeOlustur:
+		return m.viewGirdi("Proje adını yaz. Proje bu grubun bütün üyeleriyle paylaşılabilir.",
+			m.projeAdIn.View(), ui.H("enter", "oluştur"), ui.H("esc", "vazgeç"))
+	case ekProjePaneli:
+		return m.viewProjePaneli(w)
+	case ekDurum:
+		return m.viewDurum(w)
+	case ekCommitMesaj:
+		return m.viewCommitMesaj()
+	case ekGunluk:
+		return m.viewGunluk(w)
+	case ekKayit:
+		return m.viewKayit(w)
+	case ekDallar:
+		return m.viewDallar(w)
+	case ekYeniDal:
+		return m.viewYeniDal()
+	case ekDiff:
+		return m.viewDiff()
+	case ekGonderSecim:
+		return m.viewUyeSecimi(w, m.pushIdx, "Yeni kayıtlarını seçtiğin üyeye grup anahtarıyla şifreli bir paket olarak gönderir. Üyenin çevrimiçi olması gerekir.",
+			ui.H("↑↓", "seç"), ui.H("enter", "gönder"), ui.H("a", "çevrimiçi herkese"), ui.H("esc", "geri"))
+	case ekUzakDallar:
+		return m.viewUzakDallar(w)
+	case ekPullIste:
+		return m.viewUyeSecimi(w, m.pullIdx, "Seçtiğin üyeden kendi değişikliklerini sana göndermesini ister. Üyenin çevrimiçi olması gerekir.",
+			ui.H("↑↓", "seç"), ui.H("enter", "iste"), ui.H("a", "çevrimiçi herkesten"), ui.H("esc", "geri"))
+	case ekYoneticiSecim:
+		return m.viewYoneticiSecim(w)
+	case ekDosyaListesi:
+		return m.viewDosyaListesi(w)
+	case ekYeniDosya:
+		return m.viewGirdi("Çalışma klasörüne göre dosya yolu (ör. src/ana.go). Klasörler gerekirse oluşturulur.",
+			m.yeniDosyaIn.View(), ui.H("enter", "oluştur ve düzenle"), ui.H("esc", "vazgeç"))
+	case ekDosyaDuzenle:
+		return m.dosyaDuzenleTA.View() + "\n", []ui.Hint{ui.H("ctrl+s", "kaydet"), ui.H("esc", "listeye dön")}
+	case ekDisaAktar:
+		return m.viewGirdi("Projenin tüm geçmişi (nesneler ve çalışma klasörü) bu klasöre tek bir .zip dosyası olarak yazılır.",
+			m.disaAktarIn.View(), ui.H("enter", "dışa aktar"), ui.H("esc", "vazgeç"))
 	}
-	if m.isErr {
-		sb.WriteString(stErr.Render(m.notice) + "\n")
-	} else {
-		sb.WriteString(stOk.Render(m.notice) + "\n")
-	}
+	return "", nil
 }
 
-// ─── Ana menü ─────────────────────────────────────────────────────────────────
+// ─── Başlık ve alt bilgi ────────────────────────────────────────────────────
 
-func (m model) viewAnaMenu() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — DeltaX") + "\n\n")
-	sb.WriteString(stBold.Render("Kullanıcı: ") + safe(m.identity.Name) + "\n")
-	sb.WriteString(stMuted.Render("Gruplar kurup kendi sürüm kontrol sistemiyle özel bir ağda birlikte proje geliştir.") + "\n\n")
+var ekranAdlari = map[ekran][]string{
+	ekKimlik:        {"Kimlik"},
+	ekGrupListesi:   {"Gruplarım"},
+	ekGrupOlustur:   {"Yeni grup"},
+	ekDavetler:      {"Davetler"},
+	ekUyeDavet:      {"Üye davet et"},
+	ekProjeOlustur:  {"Yeni proje"},
+	ekYoneticiSecim: {"Yöneticiler"},
+	ekDurum:         {"Değişiklikler"},
+	ekCommitMesaj:   {"Kaydet"},
+	ekGunluk:        {"Günlük"},
+	ekDallar:        {"Dallar"},
+	ekYeniDal:       {"Dallar", "Yeni dal"},
+	ekGonderSecim:   {"Gönder"},
+	ekUzakDallar:    {"Uzak dallar"},
+	ekPullIste:      {"Çek iste"},
+	ekDosyaListesi:  {"Dosyalar"},
+	ekYeniDosya:     {"Dosyalar", "Yeni dosya"},
+	ekDisaAktar:     {"Dışa aktar"},
+}
 
-	for i, opt := range m.anaMenuSecenekleri() {
-		if i == m.menuIdx {
-			sb.WriteString(stSel.Render("▶  "+opt) + "\n")
+// projeEkraniMi, ekranın bir projenin içinde olup olmadığıdır.
+func projeEkraniMi(e ekran) bool {
+	switch e {
+	case ekProjePaneli, ekDurum, ekCommitMesaj, ekGunluk, ekKayit, ekDallar, ekYeniDal, ekDiff,
+		ekGonderSecim, ekUzakDallar, ekPullIste, ekDosyaListesi, ekYeniDosya, ekDosyaDuzenle, ekDisaAktar:
+		return true
+	}
+	return false
+}
+
+func grupEkraniMi(e ekran) bool {
+	switch e {
+	case ekGrupPaneli, ekUyeDavet, ekProjeOlustur, ekYoneticiSecim:
+		return true
+	}
+	return false
+}
+
+func (m model) konumIzi() []string {
+	iz := []string{"DeltaX"}
+	if (grupEkraniMi(m.ekran) || projeEkraniMi(m.ekran)) && m.aktifGrup != nil {
+		iz = append(iz, safe(m.aktifGrup.Ad))
+	}
+	if projeEkraniMi(m.ekran) && m.aktifProje != nil {
+		iz = append(iz, safe(m.aktifProje.Ad))
+	}
+	switch m.ekran {
+	case ekKayit:
+		return append(iz, "Günlük", kisa7(m.kayit.hash))
+	case ekDiff:
+		if m.diffGeri == ekKayit {
+			iz = append(iz, "Günlük", kisa7(m.kayit.hash))
 		} else {
-			sb.WriteString(stNormal.Render("   "+opt) + "\n")
+			iz = append(iz, "Değişiklikler")
+		}
+		return append(iz, safe(m.diffBaslik))
+	case ekDosyaDuzenle:
+		return append(iz, "Dosyalar", safe(m.dosyaDuzenleYol))
+	}
+	return append(iz, ekranAdlari[m.ekran]...)
+}
+
+func (m model) baslikSag() string {
+	switch {
+	case projeEkraniMi(m.ekran) && m.aktifProje != nil:
+		s := ui.S.Accent.Render("⎇ " + safe(m.aktifProje.AktifDal))
+		if m.ozet != nil && m.ozet.projeID == m.aktifProje.ID && !m.ozet.durum.temizMi() {
+			s += ui.S.Warning.Render(" ●")
+		}
+		return s
+	case grupEkraniMi(m.ekran) && m.aktifGrup != nil:
+		n := m.cevrimiciUyeSayisi(*m.aktifGrup)
+		return ui.Dot(n > 0) + ui.S.Muted.Render(fmt.Sprintf(" %d/%d çevrimiçi", n, len(m.aktifGrup.Uyeler)-1))
+	}
+	return ui.S.Name.Render(safe(m.identity.Name))
+}
+
+// durumSatiri, alt bilgideki tek satırlık durumdur: süren işlem ya da son bildirim.
+func (m model) durumSatiri() string {
+	switch {
+	case m.pending:
+		return ui.S.Accent.Render(m.spinner.View()) + ui.S.Muted.Render(" İşleniyor…")
+	case m.notice == "":
+		return ""
+	case m.isErr:
+		return ui.Notice(ui.KindError, m.notice)
+	}
+	return ui.Notice(ui.KindSuccess, m.notice)
+}
+
+// ─── Yardımcılar ────────────────────────────────────────────────────────────
+
+// sutun, s'yi (ekrandaki genişliğiyle) w sütuna boşlukla tamamlar: liste
+// satırlarında adlardan sonraki bilgiler alt alta hizalansın.
+func sutun(s string, w int) string {
+	return s + strings.Repeat(" ", max(0, w-lipgloss.Width(s)))
+}
+
+// enGenis, adların en geniş olanının ekran genişliğidir (en fazla sinir).
+func enGenis(adlar []string, sinir int) int {
+	n := 0
+	for _, a := range adlar {
+		n = max(n, lipgloss.Width(a))
+	}
+	return min(n, sinir)
+}
+
+func kisa7(h string) string {
+	if len(h) > 7 {
+		return h[:7]
+	}
+	return h
+}
+
+func kisaPeer(p string) string {
+	if len(p) > 14 {
+		return p[:12] + "…"
+	}
+	return p
+}
+
+// pencereli, satırları en fazla h satıra sığdırır: seçili satır görünür
+// kalır, kesilen kısımlar "↑ N daha" / "↓ N daha" ile belirtilir.
+func pencereli(satirlar []string, secili, h int) string {
+	n := len(satirlar)
+	if n <= h || h < 3 {
+		return strings.Join(satirlar, "\n")
+	}
+	g := h - 2
+	bas := max(0, min(secili-g/2, n-g))
+	son := bas + g
+	ust, alt := "", ""
+	if bas > 0 {
+		ust = ui.S.Subtle.Render(fmt.Sprintf("  ↑ %d daha", bas))
+	}
+	if son < n {
+		alt = ui.S.Subtle.Render(fmt.Sprintf("  ↓ %d daha", n-son))
+	}
+	return ust + "\n" + strings.Join(satirlar[bas:son], "\n") + "\n" + alt
+}
+
+func (m model) cevrimiciUyeSayisi(g Grup) int {
+	n := 0
+	for _, u := range g.Uyeler {
+		if u.PeerID != m.identity.PeerID && m.cevrimici[u.PeerID] {
+			n++
 		}
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓  j/k    enter  seç    q/esc  çıkış    ? yardım"))
-	return sb.String()
+	return n
 }
 
-func (m model) viewKimlik() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Kimlik Bilgileri") + "\n\n")
-	sb.WriteString(stBorder.Render(
-		stBold.Render("Ad      : ")+safe(m.identity.Name)+"\n"+
-			stBold.Render("Peer ID : ")+"\n"+
-			stDim.Render("  "+safe(m.identity.PeerID))+"\n"+
-			stBold.Render("Pub Key : ")+"\n"+
-			stDim.Render("  "+safe(m.identity.PubKey)),
-	) + "\n\n")
-	sb.WriteString(stMuted.Render("Bir gruba davet edilmek için Peer ID'ini kurucuya (sözlü/forum vb. dışarıdan) paylaş.") + "\n\n")
-	sb.WriteString(stDim.Render("esc  geri    ? yardım"))
-	return sb.String()
-}
-
-// ─── Grup listesi ───────────────────────────────────────────────────────────
-
-func (m model) viewGrupListesi() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Gruplarım") + "\n\n")
-	if m.grupAramaAktif {
-		sb.WriteString(stBorder.Render(m.grupAramaIn.View()) + "\n\n")
+// uyeAdi, aktif grupta peerID'nin adıdır; bilinmiyorsa kısaltılmış Peer ID.
+func (m model) uyeAdi(peerID string) string {
+	if m.aktifGrup != nil {
+		for _, u := range m.aktifGrup.Uyeler {
+			if u.PeerID == peerID && u.Ad != "" {
+				return safe(u.Ad)
+			}
+		}
 	}
-	if len(m.gruplar) == 0 {
-		sb.WriteString(stMuted.Render("Henüz bir gruba üye değilsin. Ana menüden \"Yeni Grup Oluştur\" ile başlayabilirsin.") + "\n")
+	return kisaPeer(peerID)
+}
+
+func rol(g Grup, peerID string) string {
+	switch {
+	case g.benKurucuMuyum(peerID):
+		return "kurucu"
+	case g.yoneticiMi(peerID):
+		return "yönetici"
+	}
+	return "üye"
+}
+
+// kayitOzeti, bir kaydı tek satırda yazar: kısa hash, mesaj, yazar ve zaman.
+func (m model) kayitOzeti(k LogGirdisi) []ui.Seg {
+	segs := []ui.Seg{ui.C(kisa7(k.Hash), ui.P.Accent), ui.T("  " + safe(ilkSatir(k.Commit.Mesaj)))}
+	if len(k.Commit.Ebeveynler) > 1 {
+		segs = append(segs, ui.C("  birleştirme", ui.P.Badge))
+	}
+	return append(segs, ui.M("  "+safe(k.Commit.Yazar)+" · "+goreliZaman(k.Commit.TS, simdi())))
+}
+
+func ilkSatir(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// degisiklikSeg, bir dosya değişikliğinin renkli işaretidir.
+func degisiklikSeg(tip byte) ui.Seg {
+	switch tip {
+	case '+':
+		return ui.Seg{Text: "+", Color: ui.P.Success, Bold: true, Fixed: true}
+	case '-':
+		return ui.Seg{Text: "−", Color: ui.P.Error, Bold: true, Fixed: true}
+	}
+	return ui.Seg{Text: "~", Color: ui.P.Warning, Bold: true, Fixed: true}
+}
+
+func degisiklikSayilari(d DurumSonucu) string {
+	var p []string
+	if n := len(d.Degisen); n > 0 {
+		p = append(p, fmt.Sprintf("~%d değişen", n))
+	}
+	if n := len(d.Eklenen); n > 0 {
+		p = append(p, fmt.Sprintf("+%d yeni", n))
+	}
+	if n := len(d.Silinen); n > 0 {
+		p = append(p, fmt.Sprintf("−%d silinen", n))
+	}
+	return strings.Join(p, "  ")
+}
+
+// ikiSutun, sol ve sağ blokları aralarında ince bir çizgiyle yan yana koyar.
+func ikiSutun(sol, sag string, solW, sagW int) string {
+	h := max(strings.Count(sol, "\n"), strings.Count(sag, "\n")) + 1
+	ayrac := strings.TrimSuffix(strings.Repeat(" "+ui.S.Subtle.Render("│")+" \n", h), "\n")
+	return lipgloss.JoinHorizontal(lipgloss.Top, ui.Block(sol, solW, h), ayrac, ui.Block(sag, sagW, h))
+}
+
+func (m model) viewGirdi(aciklama, girdi string, ipuclari ...ui.Hint) (string, []ui.Hint) {
+	return ui.S.Muted.Render(ui.Wrap(aciklama, ui.Measure(m.icW()))) + "\n\n" + stBorder.Render(girdi) + "\n", ipuclari
+}
+
+// ─── Ana menü ───────────────────────────────────────────────────────────────
+
+func (m model) anaMenuSatirlari() [][2]string {
+	davet := "bekleyen davet yok"
+	if n := len(m.bekleyenDavetler); n > 0 {
+		davet = fmt.Sprintf("%d davet seni bekliyor", n)
+	}
+	return [][2]string{
+		{"Gruplarım", fmt.Sprintf("%d grup", len(m.gruplar))},
+		{"Yeni Grup Oluştur", "özel bir ağ kur, üyeleri davet et"},
+		{"Davetler", davet},
+		{"Kimlik Bilgileri", "Peer ID'ni paylaş"},
+		{"Çıkış", ""},
+	}
+}
+
+func (m model) viewAnaMenu(w int) (string, []ui.Hint) {
+	ipuclari := []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "aç"), ui.H("q", "çıkış")}
+	sagW := 0
+	if w >= 96 {
+		sagW = w * 42 / 100
+	}
+	solW := w
+	if sagW > 0 {
+		solW = w - sagW - 3
+	}
+
+	var sol strings.Builder
+	sol.WriteString(ui.S.Muted.Render(ui.Wrap("Gruplar kur, kendi sürüm kontrol sistemiyle özel bir ağda birlikte proje geliştir.", solW)) + "\n\n")
+	for i, s := range m.anaMenuSatirlari() {
+		aciklama := ui.M("  " + s[1])
+		if i == 2 && len(m.bekleyenDavetler) > 0 {
+			aciklama = ui.Seg{Text: "  " + s[1], Color: ui.P.Warning}
+		}
+		sol.WriteString(ui.Row(solW, i == m.menuIdx, ui.Seg{Text: fmt.Sprintf("%-20s", s[0]), Bold: true}, aciklama) + "\n")
+	}
+
+	var sag strings.Builder
+	sag.WriteString(ui.Section("Özet") + "\n")
+	cevrimici := map[string]bool{}
+	for _, g := range m.gruplar {
+		for _, u := range g.Uyeler {
+			if u.PeerID != m.identity.PeerID && m.cevrimici[u.PeerID] {
+				cevrimici[u.PeerID] = true
+			}
+		}
+	}
+	sag.WriteString(ui.KV(12, "Gruplar", fmt.Sprint(len(m.gruplar))) + "\n")
+	sag.WriteString(ui.KV(12, "Çevrimiçi", ui.Dot(len(cevrimici) > 0)+fmt.Sprintf(" %d grup arkadaşı", len(cevrimici))) + "\n")
+	sag.WriteString(ui.KV(12, "Davetler", fmt.Sprint(len(m.bekleyenDavetler))) + "\n\n")
+	sag.WriteString(ui.Section("Son kayıtlar") + "\n")
+	if len(m.sonKayitlar) == 0 {
+		sag.WriteString(ui.S.Muted.Render("Henüz kayıt yok.") + "\n")
+	}
+	genislik := w
+	if sagW > 0 {
+		genislik = sagW
+	}
+	for _, k := range m.sonKayitlar {
+		sag.WriteString(ui.Truncate(ui.S.Accent.Render(kisa7(k.Hash))+" "+safe(ilkSatir(k.Commit.Mesaj)), genislik) + "\n")
+		sag.WriteString(ui.Truncate(ui.S.Muted.Render("  "+safe(k.Commit.Yazar)+" · "+safe(k.proje)+" · "+goreliZaman(k.Commit.TS, simdi())), genislik) + "\n")
+	}
+
+	if sagW == 0 {
+		return sol.String() + "\n" + sag.String(), ipuclari
+	}
+	return ikiSutun(sol.String(), sag.String(), solW, sagW) + "\n", ipuclari
+}
+
+func (m model) viewKimlik(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	b.WriteString(ui.KV(14, "Ad", ui.S.Name.Render(safe(m.identity.Name))) + "\n")
+	b.WriteString(ui.KV(14, "Peer ID", ui.Truncate(safe(m.identity.PeerID), w-14)) + "\n")
+	b.WriteString(ui.KV(14, "Genel anahtar", ui.Truncate(safe(m.identity.PubKey), w-14)) + "\n\n")
+	b.WriteString(ui.S.Muted.Render(ui.Wrap("Bir gruba davet edilmek için Peer ID'ni grubun kurucusuna ya da bir yöneticisine ilet (forum, sohbet ya da başka bir yoldan).", ui.Measure(w))) + "\n")
+	return b.String(), []ui.Hint{ui.H("esc", "geri")}
+}
+
+// ─── Gruplar ────────────────────────────────────────────────────────────────
+
+func (m model) viewGrupListesi(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	if m.grupAramaAktif {
+		b.WriteString(stBorder.Render(m.grupAramaIn.View()) + "\n\n")
 	}
 	gorunur := m.gruplarGorunur()
-	if len(m.gruplar) > 0 && len(gorunur) == 0 {
-		sb.WriteString(stMuted.Render("Aramayla eşleşen grup yok.") + "\n")
+	switch {
+	case len(m.gruplar) == 0:
+		b.WriteString(ui.S.Muted.Render("Henüz bir gruba üye değilsin. Ana menüden \"Yeni Grup Oluştur\" ile başlayabilir ya da bir davet bekleyebilirsin.") + "\n")
+	case len(gorunur) == 0:
+		b.WriteString(ui.S.Muted.Render("Aramayla eşleşen grup yok.") + "\n")
 	}
+	var satirlar []string
 	for i, g := range gorunur {
-		rol := "Üye"
-		switch {
-		case g.benKurucuMuyum(m.identity.PeerID):
-			rol = "Kurucu"
-		case g.yoneticiMi(m.identity.PeerID):
-			rol = "Yönetici"
+		segs := []ui.Seg{
+			{Text: safe(g.Ad), Bold: true},
+			ui.M(fmt.Sprintf("  %d üye · %s", len(g.Uyeler), rol(g, m.identity.PeerID))),
 		}
-		line := fmt.Sprintf("%s  %s", safe(g.Ad), stDim.Render(fmt.Sprintf("(%d üye — %s)", len(g.Uyeler), rol)))
-		if i == m.grupIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
+		if n := m.cevrimiciUyeSayisi(g); n > 0 {
+			segs = append(segs, ui.C(fmt.Sprintf("  ● %d çevrimiçi", n), ui.P.Success))
 		}
+		satirlar = append(satirlar, ui.Row(w, i == m.grupIdx, segs...))
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
+	b.WriteString(pencereli(satirlar, m.grupIdx, m.govdeYuksekligi()-2) + "\n")
 	if m.grupAramaAktif {
-		sb.WriteString(stDim.Render("yazarken filtrelenir   enter aç   esc aramadan çık"))
-	} else {
-		sb.WriteString(stDim.Render("↑/↓ seç   enter aç   / ara   r yenile   esc geri   ? yardım"))
+		return b.String(), []ui.Hint{ui.H("yaz", "süz"), ui.H("enter", "aç"), ui.H("esc", "aramadan çık")}
 	}
-	return sb.String()
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "aç"), ui.H("/", "ara"), ui.H("r", "yenile"), ui.H("esc", "geri")}
 }
 
-func (m model) viewGrupOlustur() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Yeni Grup Oluştur") + "\n\n")
-	sb.WriteString(stMuted.Render("Grup adı gir. Bir AES-256 grup anahtarı otomatik üretilecek; yalnızca davet ettiğin üyeler bunu bilecek.") + "\n\n")
-	sb.WriteString(stBorder.Render(m.grupAdIn.View()) + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter oluştur   esc geri"))
-	return sb.String()
-}
-
-// ─── Grup paneli ────────────────────────────────────────────────────────────
-
-func (m model) viewGrupPaneli() string {
-	var sb strings.Builder
+func (m model) viewGrupPaneli(w int) (string, []ui.Hint) {
 	g := m.aktifGrup
-	sb.WriteString(stTitle.Render("AND — "+safe(g.Ad)) + "\n\n")
+	sagW := 0
+	if w >= 90 {
+		sagW = w * 38 / 100
+	}
+	solW := w
+	if sagW > 0 {
+		solW = w - sagW - 3
+	}
 
-	sb.WriteString(stBold.Render("Üyeler:") + "\n")
-	for _, u := range g.Uyeler {
-		durum := stDim.Render("çevrimdışı")
-		if m.cevrimici[u.PeerID] {
-			durum = stOk.Render("çevrimiçi")
+	var sol strings.Builder
+	sol.WriteString(ui.Section(fmt.Sprintf("Projeler (%d)", len(m.projeler))) + "\n")
+	if len(m.projeler) == 0 {
+		sol.WriteString(ui.S.Muted.Render("Henüz proje yok — n ile oluştur.") + "\n")
+	}
+	var satirlar []string
+	for i, p := range m.projeler {
+		segs := []ui.Seg{{Text: safe(p.Ad), Bold: true}, ui.C("  ⎇ "+safe(p.AktifDal), ui.P.Accent)}
+		if k, ok := m.projeSonKayit[p.ID]; ok {
+			segs = append(segs, ui.M("  · "+safe(ilkSatir(k.Commit.Mesaj))+" · "+goreliZaman(k.Commit.TS, simdi())))
+		} else {
+			segs = append(segs, ui.M("  · henüz kayıt yok"))
+		}
+		satirlar = append(satirlar, ui.Row(solW, i == m.projeIdx, segs...))
+	}
+	sol.WriteString(pencereli(satirlar, m.projeIdx, m.govdeYuksekligi()-2) + "\n")
+
+	var sag strings.Builder
+	sag.WriteString(ui.Section(fmt.Sprintf("Üyeler (%d)", len(g.Uyeler))) + "\n")
+	uyeler := append([]Uye(nil), g.Uyeler...)
+	sort.SliceStable(uyeler, func(i, j int) bool { return rolSirasi(*g, uyeler[i].PeerID) < rolSirasi(*g, uyeler[j].PeerID) })
+	for _, u := range uyeler {
+		ben := u.PeerID == m.identity.PeerID
+		nokta := ui.Dot(ben || m.cevrimici[u.PeerID])
+		ad := ui.S.Name.Render(safe(u.Ad))
+		if ben {
+			ad += ui.S.Muted.Render(" (sen)")
 		}
 		etiket := ""
-		switch {
-		case u.PeerID == g.KurucuPeer:
-			etiket = stDim.Render(" (kurucu)")
-		case g.yoneticiMi(u.PeerID):
-			etiket = stDim.Render(" (yönetici)")
+		if r := rol(*g, u.PeerID); r != "üye" {
+			etiket = "  " + ui.S.Badge.Render(r)
 		}
-		sb.WriteString(fmt.Sprintf("  • %s%s — %s\n", safe(u.Ad), etiket, durum))
+		sag.WriteString(ui.Truncate(nokta+" "+ad+etiket, max(sagW, 20)) + "\n")
 	}
-	sb.WriteString("\n" + stBold.Render("Projeler:") + "\n")
-	if len(m.projeler) == 0 {
-		sb.WriteString(stMuted.Render("  Henüz proje yok — n ile oluşturabilirsin.\n"))
-	}
-	for i, p := range m.projeler {
-		line := fmt.Sprintf("%s  %s", safe(p.Ad), stDim.Render("(dal: "+p.AktifDal+")"))
-		if i == m.projeIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
-		}
-	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	ipucu := "↑/↓ seç   enter aç proje   n yeni proje"
+
+	ipuclari := []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "projeyi aç"), ui.H("n", "yeni proje")}
 	if g.yetkiliMi(m.identity.PeerID) {
-		ipucu += "   i üye davet et"
+		ipuclari = append(ipuclari, ui.H("i", "üye davet et"))
 	}
 	if g.benKurucuMuyum(m.identity.PeerID) {
-		ipucu += "   y yönetici ata"
+		ipuclari = append(ipuclari, ui.H("y", "yöneticiler"))
 	}
 	if g.yetkiliMi(m.identity.PeerID) {
-		ipucu += "   x grubu kapat"
+		ipuclari = append(ipuclari, ui.H("x", "grubu kapat"))
 	} else {
-		ipucu += "   x gruptan çık"
+		ipuclari = append(ipuclari, ui.H("x", "gruptan çık"))
 	}
-	sb.WriteString(stDim.Render(ipucu + "   r yenile   esc geri   ? yardım"))
-	return sb.String()
+	ipuclari = append(ipuclari, ui.H("r", "yenile"), ui.H("esc", "geri"))
+
+	if sagW == 0 {
+		return sol.String() + "\n" + sag.String(), ipuclari
+	}
+	return ikiSutun(sol.String(), sag.String(), solW, sagW) + "\n", ipuclari
 }
 
-func (m model) viewUyeDavet() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Üye Davet Et — "+safe(m.aktifGrup.Ad)) + "\n\n")
-	sb.WriteString(stMuted.Render("Davet edeceğin kişinin peer ID'sini gir (Kimlik ekranından paylaşabilir).") + "\n\n")
-	sb.WriteString(stBorder.Render(m.uyeDavetIn.View()) + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter gönder   esc geri"))
-	return sb.String()
+func rolSirasi(g Grup, peerID string) int {
+	switch rol(g, peerID) {
+	case "kurucu":
+		return 0
+	case "yönetici":
+		return 1
+	}
+	return 2
 }
 
-func (m model) viewDavetler() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Bekleyen Davetler") + "\n\n")
+func (m model) viewUyeDavet(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	b.WriteString(ui.S.Muted.Render(ui.Wrap("Davet edeceğin kişinin Peer ID'sini yaz (kendi ID'sini AND'ın Kimlik ekranından paylaşabilir). Kişi çevrimdışıysa AND daveti bekletir ve bağlandığında iletir.", ui.Measure(w))) + "\n\n")
+	b.WriteString(stBorder.Render(m.uyeDavetIn.View()) + "\n\n")
+	oneriler := m.davetOnerileri()
+	b.WriteString(ui.Section("Bağlı AND düğümleri") + "\n")
+	if len(oneriler) == 0 {
+		b.WriteString(ui.S.Muted.Render("Şu an davet edilebilecek bağlı bir AND düğümü yok; Peer ID'yi elle yaz.") + "\n")
+	}
+	for i, p := range oneriler {
+		b.WriteString(ui.Row(w, i == m.oneriIdx, ui.T(safe(p.PeerID))) + "\n")
+	}
+	ipuclari := []ui.Hint{ui.H("enter", "davet et"), ui.H("esc", "vazgeç")}
+	if len(oneriler) > 0 {
+		ipuclari = append([]ui.Hint{ui.H("↑↓", "öneriden seç")}, ipuclari...)
+	}
+	return b.String(), ipuclari
+}
+
+func (m model) viewDavetler(w int) (string, []ui.Hint) {
+	var b strings.Builder
 	if len(m.bekleyenDavetler) == 0 {
-		sb.WriteString(stMuted.Render("Bekleyen davet yok.") + "\n")
+		b.WriteString(ui.S.Muted.Render("Bekleyen davet yok. Bir grubun kurucusu ya da yöneticisi seni davet ettiğinde burada görünür.") + "\n")
+		return b.String(), []ui.Hint{ui.H("esc", "geri")}
 	}
 	for i, d := range m.bekleyenDavetler {
-		line := fmt.Sprintf("%s  %s", safe(d.Payload.GrupAd), stDim.Render("kurucu: "+safe(d.Payload.Kurucu.Ad)))
-		if i == m.davetIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
-		}
+		b.WriteString(ui.Row(w, i == m.davetIdx,
+			ui.Seg{Text: safe(d.Payload.GrupAd), Bold: true},
+			ui.M(fmt.Sprintf("  davet eden: %s (%s) · %d üye", safe(d.Payload.Gonderen.Ad), kisaPeer(d.GonderenPeer), len(d.Payload.Uyeler))),
+		) + "\n")
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   a kabul et   r reddet   esc geri   ? yardım"))
-	return sb.String()
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("a", "kabul et"), ui.H("r", "reddet"), ui.H("esc", "geri")}
 }
 
-// ─── Proje oluştur ──────────────────────────────────────────────────────────
-
-func (m model) viewProjeOlustur() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Yeni Proje — "+safe(m.aktifGrup.Ad)) + "\n\n")
-	sb.WriteString(stBorder.Render(m.projeAdIn.View()) + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter oluştur   esc geri"))
-	return sb.String()
+func (m model) viewYoneticiSecim(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	b.WriteString(ui.S.Muted.Render(ui.Wrap("Yöneticiler, kurucu gibi üye davet edebilir ve grubu kapatabilir: kurucuya ulaşılamazsa grup yönetimsiz kalmaz.", ui.Measure(w))) + "\n\n")
+	if len(m.yoneticiHar) == 0 {
+		b.WriteString(ui.S.Muted.Render("Grupta başka üye yok.") + "\n")
+	}
+	for i, u := range m.yoneticiHar {
+		segs := []ui.Seg{{Text: safe(u.Ad), Bold: true}}
+		if m.aktifGrup.yoneticiMi(u.PeerID) {
+			segs = append(segs, ui.C("  yönetici", ui.P.Badge))
+		}
+		b.WriteString(ui.Row(w, i == m.yoneticiIdx, segs...) + "\n")
+	}
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "yönetici yap/kaldır"), ui.H("esc", "geri")}
 }
 
 // ─── Proje paneli ───────────────────────────────────────────────────────────
 
-func (m model) viewProjePaneli() string {
-	var sb strings.Builder
+func (m model) viewProjePaneli(w int) (string, []ui.Hint) {
 	p := m.aktifProje
-	sb.WriteString(stTitle.Render("AND — "+safe(p.Ad)+"  ["+safe(m.aktifGrup.Ad)+"]") + "\n\n")
-	sb.WriteString(stBold.Render("Aktif dal : ") + p.AktifDal + "\n")
-	head := p.Dallar[p.AktifDal]
-	if head == "" {
-		sb.WriteString(stBold.Render("HEAD      : ") + stMuted.Render("(henüz kayıt yok)") + "\n")
-	} else {
-		sb.WriteString(stBold.Render("HEAD      : ") + kisaHash(head) + "\n")
+	oz := m.ozet
+	if oz != nil && oz.projeID != p.ID {
+		oz = nil
 	}
-	sb.WriteString(stBold.Render("Klasör    : ") + stDim.Render(m.calismaDir()) + "\n")
+	const etW = 12
+	var b strings.Builder
+
+	son := ui.S.Muted.Render("hesaplanıyor…")
+	calisma := son
+	ekip := ""
+	if oz != nil {
+		switch {
+		case oz.son != nil:
+			son = ui.Truncate(ui.S.Accent.Render(kisa7(oz.son.Hash))+" "+safe(ilkSatir(oz.son.Commit.Mesaj))+
+				ui.S.Muted.Render(" — "+safe(oz.son.Commit.Yazar)+", "+goreliZaman(oz.son.Commit.TS, simdi())), w-etW)
+		default:
+			son = ui.S.Muted.Render("henüz kayıt yok — c ile ilk kaydı oluştur")
+		}
+		if oz.durum.temizMi() {
+			calisma = ui.S.Success.Render("✓ temiz")
+		} else {
+			calisma = ui.S.Warning.Render(degisiklikSayilari(oz.durum))
+		}
+		yeniUc := 0
+		for _, n := range oz.uzakYeni {
+			if n > 0 {
+				yeniUc++
+			}
+		}
+		if yeniUc > 0 {
+			ekip = ui.S.Warning.Render(fmt.Sprintf("  · %d uçta birleştirilmemiş kayıt", yeniUc))
+		}
+	}
+	b.WriteString(ui.KV(etW, "Dal", ui.S.Accent.Render("⎇ "+safe(p.AktifDal))) + ui.S.Muted.Render(fmt.Sprintf("  (%d dal)", len(p.Dallar))) + "\n")
+	b.WriteString(ui.KV(etW, "Son kayıt", son) + "\n")
+	b.WriteString(ui.KV(etW, "Çalışma", calisma) + "\n")
+	b.WriteString(ui.KV(etW, "Ekip", fmt.Sprintf("%d/%d çevrimiçi", m.cevrimiciUyeSayisi(*m.aktifGrup), len(m.aktifGrup.Uyeler)-1)) + ekip + "\n")
+	b.WriteString(ui.KV(etW, "Klasör", ui.S.Muted.Render(ui.Truncate(m.calismaDir(), w-etW))) + "\n")
 	if _, birlesmeVar := birlesmeBekleniyorMu(m.dataDir, p.ID); birlesmeVar {
-		sb.WriteString(stWarn.Render("⚠ Devam eden bir birleştirme var — çakışmaları çözüp Kaydet'e bas.") + "\n")
+		b.WriteString("\n" + ui.Notice(ui.KindWarning, "Süren bir birleştirme var: çakışan dosyaları düzenleyip kaydet (c).") + "\n")
 	}
-	sb.WriteString("\n")
-
-	for i, opt := range m.projePanelSecenekleri() {
-		if i == m.projePanelIdx {
-			sb.WriteString(stSel.Render("▶  "+opt) + "\n")
-		} else {
-			sb.WriteString(stNormal.Render("   "+opt) + "\n")
+	if oz != nil && oz.hata != "" {
+		b.WriteString("\n" + ui.Notice(ui.KindError, oz.hata) + "\n")
+	}
+	b.WriteString("\n" + ui.Section("İşlemler") + "\n")
+	for i, is := range projeIslemleri {
+		segs := []ui.Seg{{Text: is.tus, Color: ui.P.Accent, Bold: true}, ui.T(fmt.Sprintf("  %-25s", is.ad))}
+		switch {
+		case is.tus == "d" && oz != nil && !oz.durum.temizMi():
+			segs = append(segs, ui.C(fmt.Sprintf("%d dosya  ", len(degisiklikListesi(oz.durum))), ui.P.Warning))
+		case is.tus == "m" && oz != nil:
+			if n := toplamYeni(oz.uzakYeni); n > 0 {
+				segs = append(segs, ui.C(fmt.Sprintf("%d yeni kayıt  ", n), ui.P.Warning))
+			}
 		}
+		segs = append(segs, ui.M(is.aciklama))
+		b.WriteString(ui.Row(w, i == m.projePanelIdx, segs...) + "\n")
 	}
-	sb.WriteString("\n")
-	if m.pending {
-		sb.WriteString(stFocused.Render(m.spinner.View()) + " " + stDim.Render("İşleniyor…") + "\n")
-	}
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter çalıştır   esc geri   ? yardım"))
-	return sb.String()
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "çalıştır"), ui.H("d c l b p m u f", "doğrudan"), ui.H("esc", "geri")}
 }
 
-func (m model) viewDurum() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Durum — "+safe(m.aktifProje.Ad)) + "\n\n")
-	yazGrup := func(baslik string, stil lipgloss.Style, dosyalar []string) {
-		if len(dosyalar) == 0 {
-			return
-		}
-		sb.WriteString(stBold.Render(baslik+":") + "\n")
-		for _, d := range dosyalar {
-			sb.WriteString("  " + stil.Render(d) + "\n")
-		}
-		sb.WriteString("\n")
+func toplamYeni(uzakYeni map[string]int) int {
+	n := 0
+	for _, v := range uzakYeni {
+		n += v
 	}
-	yazGrup("Eklenen", stAdd, m.durum.Eklenen)
-	yazGrup("Değişen", stMod, m.durum.Degisen)
-	yazGrup("Silinen", stDel, m.durum.Silinen)
-	if m.durum.temizMi() {
-		sb.WriteString(stOk.Render("Çalışma dizini temiz — kaydedilmemiş değişiklik yok.") + "\n\n")
-	}
-	sb.WriteString(stDim.Render("esc geri   ? yardım"))
-	return sb.String()
+	return n
 }
 
-func (m model) viewCommitMesaj() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Kaydet (Commit) — "+safe(m.aktifProje.Ad)) + "\n\n")
-	sb.WriteString(stBorder.Render(m.commitMsgIn.View()) + "\n\n")
-	if m.pending {
-		sb.WriteString(stFocused.Render(m.spinner.View()) + " " + stDim.Render("Kaydediliyor…") + "\n")
+// ─── Değişiklikler ──────────────────────────────────────────────────────────
+
+func (m model) viewDurum(w int) (string, []ui.Hint) {
+	liste := degisiklikListesi(m.durum)
+	if len(liste) == 0 {
+		return ui.Notice(ui.KindSuccess, "Çalışma klasörü temiz: kaydedilmemiş değişiklik yok.") + "\n",
+			[]ui.Hint{ui.H("r", "yenile"), ui.H("esc", "geri")}
 	}
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter kaydet   esc geri"))
-	return sb.String()
+	var b strings.Builder
+	b.WriteString(ui.S.Muted.Render(degisiklikSayilari(m.durum)+" — son kayda göre") + "\n\n")
+	satirlar := make([]string, len(liste))
+	for i, d := range liste {
+		satirlar[i] = ui.Row(w, i == m.durumIdx, degisiklikSeg(d.Tip), ui.T("  "+safe(d.Yol)))
+	}
+	b.WriteString(pencereli(satirlar, m.durumIdx, m.govdeYuksekligi()-2) + "\n")
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "fark"), ui.H("g", "geri al"), ui.H("c", "kaydet"), ui.H("r", "yenile"), ui.H("esc", "geri")}
 }
 
-func (m model) viewGunluk() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Günlük — "+safe(m.aktifProje.Ad)) + "\n\n")
-	if m.gunlukAramaAktif {
-		sb.WriteString(stBorder.Render(m.gunlukAramaIn.View()) + "\n\n")
-	}
-	sb.WriteString(m.gunlukVP.View() + "\n\n")
-	if m.gunlukAramaAktif {
-		sb.WriteString(stDim.Render("yazarken filtrelenir   esc aramadan çık"))
+func (m model) viewCommitMesaj() (string, []ui.Hint) {
+	var b strings.Builder
+	if m.ozet != nil && m.ozet.projeID == m.aktifProje.ID && !m.ozet.durum.temizMi() {
+		b.WriteString(ui.S.Muted.Render("Kaydedilecek: ") + ui.S.Warning.Render(degisiklikSayilari(m.ozet.durum)) +
+			ui.S.Muted.Render("  →  ⎇ "+safe(m.aktifProje.AktifDal)) + "\n\n")
 	} else {
-		sb.WriteString(stDim.Render("↑/↓ kaydır   / ara   esc geri   ? yardım"))
+		b.WriteString(ui.S.Muted.Render("Çalışma klasörünün anlık görüntüsü ⎇ "+safe(m.aktifProje.AktifDal)+" dalına kaydedilir.") + "\n\n")
 	}
-	return sb.String()
+	b.WriteString(stBorder.Render(m.commitMsgIn.View()) + "\n")
+	return b.String(), []ui.Hint{ui.H("enter", "kaydet"), ui.H("esc", "vazgeç")}
 }
 
-func (m model) viewDallar() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Dallar — "+safe(m.aktifProje.Ad)) + "\n\n")
+// ─── Günlük ve kayıt ayrıntısı ──────────────────────────────────────────────
+
+func (m model) viewGunluk(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	gorunur := m.gunlukGorunur()
+	ust := 2
+	if m.gunlukAramaAktif || m.gunlukAramaIn.Value() != "" {
+		b.WriteString(stBorder.Render(m.gunlukAramaIn.View()) + "\n")
+		ust += 3
+	}
+	sayi := fmt.Sprintf("%d kayıt", len(gorunur))
+	if len(gorunur) != len(m.gunluk) {
+		sayi = fmt.Sprintf("%d / %d kayıt", len(gorunur), len(m.gunluk))
+	}
+	b.WriteString(ui.S.Muted.Render(sayi+" · ⎇ "+safe(m.aktifProje.AktifDal)) + "\n\n")
+	if len(m.gunluk) == 0 {
+		b.WriteString(ui.S.Muted.Render("Henüz kayıt yok. Proje panelinde c ile ilk kaydı oluştur.") + "\n")
+	}
+	satirlar := make([]string, len(gorunur))
+	for i, k := range gorunur {
+		satirlar[i] = ui.Row(w, i == m.gunlukIdx, m.kayitOzeti(k)...)
+	}
+	b.WriteString(pencereli(satirlar, m.gunlukIdx, m.govdeYuksekligi()-ust) + "\n")
+	if m.gunlukAramaAktif {
+		return b.String(), []ui.Hint{ui.H("yaz", "süz"), ui.H("↑↓", "seç"), ui.H("enter", "ayrıntı"), ui.H("esc", "aramadan çık")}
+	}
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "ayrıntı"), ui.H("/", "ara"), ui.H("esc", "geri")}
+}
+
+func (m model) viewKayit(w int) (string, []ui.Hint) {
+	k := m.kayit
+	c := k.commit
+	const etW = 10
+	var b strings.Builder
+	b.WriteString(ui.KV(etW, "Kayıt", ui.S.Accent.Render(ui.Truncate(k.hash, w-etW))) + "\n")
+	b.WriteString(ui.KV(etW, "Yazar", ui.S.Name.Render(safe(c.Yazar))) + "\n")
+	b.WriteString(ui.KV(etW, "Tarih", c.TS.Local().Format("02.01.2006 15:04")+ui.S.Muted.Render("  ("+goreliZaman(c.TS, simdi())+")")) + "\n")
+	switch len(c.Ebeveynler) {
+	case 0:
+		b.WriteString(ui.KV(etW, "Önceki", ui.S.Muted.Render("yok — projenin ilk kaydı")) + "\n")
+	case 1:
+		b.WriteString(ui.KV(etW, "Önceki", kisa7(c.Ebeveynler[0])) + "\n")
+	default:
+		var e []string
+		for _, h := range c.Ebeveynler {
+			e = append(e, kisa7(h))
+		}
+		b.WriteString(ui.KV(etW, "Önceki", strings.Join(e, " + ")+ui.S.Badge.Render("  birleştirme")) + "\n")
+	}
+	mesaj := ui.Wrap(safe(c.Mesaj), ui.Measure(w)-2)
+	b.WriteString("\n" + ui.S.Card.Render(mesaj) + "\n\n")
+	b.WriteString(ui.Section(fmt.Sprintf("Değişen dosyalar (%d)", len(k.degisiklikler))) + "\n")
+	if len(k.degisiklikler) == 0 {
+		b.WriteString(ui.S.Muted.Render("Bu kayıt dosya değiştirmiyor.") + "\n")
+	}
+	satirlar := make([]string, len(k.degisiklikler))
+	for i, d := range k.degisiklikler {
+		satirlar[i] = ui.Row(w, i == k.idx, degisiklikSeg(d.Tip), ui.T("  "+safe(d.Yol)))
+	}
+	kullanilan := 7 + strings.Count(mesaj, "\n") + 3
+	b.WriteString(pencereli(satirlar, k.idx, m.govdeYuksekligi()-kullanilan) + "\n")
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "fark"), ui.H("b", "bu kayıttan dal"), ui.H("esc", "günlük")}
+}
+
+func (m model) viewDiff() (string, []ui.Hint) {
+	ozet := ui.S.Success.Render(fmt.Sprintf("+%d", m.diffEklenen)) + " " + ui.S.Error.Render(fmt.Sprintf("−%d", m.diffSilinen)) + ui.S.Muted.Render(" satır")
+	if m.diffGeri == ekKayit {
+		ozet += ui.S.Muted.Render("  · " + kisa7(m.kayit.hash) + " kaydında, öncekine göre")
+	} else {
+		ozet += ui.S.Muted.Render("  · çalışma klasöründe, son kayda göre")
+	}
+	return ozet + "\n\n" + m.diffVP.View() + "\n", []ui.Hint{ui.H("↑↓", "kaydır"), ui.H("pgup/pgdn", "sayfa"), ui.H("esc", "geri")}
+}
+
+// ─── Dallar ─────────────────────────────────────────────────────────────────
+
+func (m model) viewDallar(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	satirlar := make([]string, len(m.dallar))
+	var adlar []string
+	for _, d := range m.dallar {
+		adlar = append(adlar, safe(d))
+	}
+	adW := enGenis(adlar, 30)
 	for i, d := range m.dallar {
-		etiket := d
+		segs := []ui.Seg{{Text: sutun(safe(d), adW), Bold: true}}
 		if d == m.aktifProje.AktifDal {
-			etiket += stDim.Render("  (aktif)")
-		}
-		if i == m.dalIdx {
-			sb.WriteString(stSel.Render("▶ "+etiket) + "\n")
+			segs = append(segs, ui.Seg{Text: "  ● etkin", Color: ui.P.Success, Fixed: true})
 		} else {
-			sb.WriteString("  " + etiket + "\n")
+			segs = append(segs, ui.T("         "))
 		}
-	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter dala geç   n yeni dal   esc geri   ? yardım"))
-	return sb.String()
-}
-
-func (m model) viewYeniDal() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Yeni Dal") + "\n\n")
-	sb.WriteString(stBorder.Render(m.yeniDalIn.View()) + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter oluştur   esc geri"))
-	return sb.String()
-}
-
-func (m model) viewDiffListesi() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Fark — Dosya Seç") + "\n\n")
-	if len(m.diffDosyalar) == 0 {
-		sb.WriteString(stMuted.Render("Değişen veya yeni eklenen dosya yok.") + "\n")
-	}
-	for i, d := range m.diffDosyalar {
-		if i == m.diffIdx {
-			sb.WriteString(stSel.Render("▶ "+d) + "\n")
+		if k, ok := m.dalSon[d]; ok {
+			segs = append(segs, ui.M("  "+kisa7(k.Hash)+" "+safe(ilkSatir(k.Commit.Mesaj))+" · "+goreliZaman(k.Commit.TS, simdi())))
 		} else {
-			sb.WriteString("  " + d + "\n")
+			segs = append(segs, ui.M("  henüz kayıt yok"))
 		}
+		satirlar[i] = ui.Row(w, i == m.dalIdx, segs...)
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter farkı göster   esc geri   ? yardım"))
-	return sb.String()
+	b.WriteString(pencereli(satirlar, m.dalIdx, m.govdeYuksekligi()) + "\n")
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "dala geç"), ui.H("n", "yeni dal"), ui.H("d", "sil"), ui.H("esc", "geri")}
 }
 
-func (m model) viewDiff() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Fark — "+safe(m.diffBaslik)) + "\n\n")
-	sb.WriteString(m.diffVP.View() + "\n\n")
-	sb.WriteString(stDim.Render("↑/↓ kaydır   esc geri   ? yardım"))
-	return sb.String()
+func (m model) viewYeniDal() (string, []ui.Hint) {
+	kaynak := "⎇ " + safe(m.aktifProje.AktifDal) + " dalının son kaydından"
+	if m.dalKaynak != "" {
+		kaynak = kisa7(m.dalKaynak) + " kaydından"
+	}
+	return m.viewGirdi("Yeni dal "+kaynak+" başlar. Dala geçmek için Dallar listesinde enter'a bas.",
+		m.yeniDalIn.View(), ui.H("enter", "oluştur"), ui.H("esc", "vazgeç"))
 }
 
-func (m model) viewGonderSecim() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Gönder (Push) — "+safe(m.aktifProje.Ad)) + "\n\n")
+// ─── Ekip: gönder, çek, uzak dallar ─────────────────────────────────────────
+
+func (m model) viewUyeSecimi(w, secili int, aciklama string, ipuclari ...ui.Hint) (string, []ui.Hint) {
+	var b strings.Builder
+	b.WriteString(ui.S.Muted.Render(ui.Wrap(aciklama, ui.Measure(w))) + "\n\n")
 	if len(m.uyelerHar) == 0 {
-		sb.WriteString(stMuted.Render("Grupta başka üye yok.") + "\n")
+		b.WriteString(ui.S.Muted.Render("Grupta başka üye yok. Grup panelinde i ile üye davet edebilirsin.") + "\n")
+		return b.String(), []ui.Hint{ui.H("esc", "geri")}
 	}
+	var adlar []string
+	for _, u := range m.uyelerHar {
+		adlar = append(adlar, safe(u.Ad))
+	}
+	adW := enGenis(adlar, 24)
 	for i, u := range m.uyelerHar {
-		durum := stDim.Render("çevrimdışı")
+		durum := ui.M("  çevrimdışı")
 		if m.cevrimici[u.PeerID] {
-			durum = stOk.Render("çevrimiçi")
+			durum = ui.Seg{Text: "  çevrimiçi ", Color: ui.P.Success, Fixed: true}
 		}
-		line := safe(u.Ad) + "  " + durum
-		if i == m.pushIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
+		segs := []ui.Seg{{Text: sutun(safe(u.Ad), adW), Bold: true}, durum}
+		if h := m.aktifProje.Uzaklar[u.PeerID+"/"+m.aktifProje.AktifDal]; h != "" {
+			segs = append(segs, ui.M("  · bildiği son kayıt "+kisa7(h)))
 		}
+		b.WriteString(ui.Row(w, i == secili, segs...) + "\n")
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter gönder   a çevrimiçi herkese gönder   esc geri   ? yardım"))
-	return sb.String()
+	return b.String(), ipuclari
 }
 
-func (m model) viewUzakDallar() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Uzak Dallar (Birleştir) — "+safe(m.aktifProje.Ad)) + "\n\n")
+func (m model) viewUzakDallar(w int) (string, []ui.Hint) {
+	var b strings.Builder
 	if len(m.uzakAnahtarlari) == 0 {
-		sb.WriteString(stMuted.Render("Henüz bir üyeden alınmış değişiklik yok. Gönder/Çek ile başlayabilirsin.") + "\n")
+		b.WriteString(ui.S.Muted.Render(ui.Wrap("Henüz bir üyeden değişiklik gelmedi. Bir üyeden Çek İste (u) ya da üyelerin sana göndermesini bekle.", ui.Measure(w))) + "\n")
+		return b.String(), []ui.Hint{ui.H("esc", "geri")}
 	}
+	b.WriteString(ui.S.Muted.Render(ui.Wrap("Üyelerden gelen dalların uçları. Birleştirme, seçilen ucu etkin dalına üç yönlü olarak katar.", ui.Measure(w))) + "\n\n")
 	for i, k := range m.uzakAnahtarlari {
-		line := k + "  " + stDim.Render(kisaHash(m.aktifProje.Uzaklar[k]))
-		if i == m.uzakIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
+		peer, dal, _ := strings.Cut(k, "/")
+		segs := []ui.Seg{{Text: m.uyeAdi(peer), Bold: true}, ui.C("  ⎇ "+safe(dal), ui.P.Accent), ui.M("  " + kisa7(m.aktifProje.Uzaklar[k]))}
+		if m.ozet != nil && m.ozet.projeID == m.aktifProje.ID {
+			if n := m.ozet.uzakYeni[k]; n > 0 {
+				segs = append(segs, ui.Seg{Text: fmt.Sprintf("  %d yeni kayıt", n), Color: ui.P.Warning, Fixed: true})
+			} else {
+				segs = append(segs, ui.Seg{Text: "  güncel", Color: ui.P.Success, Fixed: true})
+			}
 		}
+		b.WriteString(ui.Row(w, i == m.uzakIdx, segs...) + "\n")
 	}
-	sb.WriteString("\n")
 	if len(m.sonCatismalar) > 0 {
-		sb.WriteString(stWarn.Render("Son birleştirmede çakışan dosyalar:") + "\n")
+		b.WriteString("\n" + ui.Notice(ui.KindWarning, "Son birleştirmede çakışan dosyalar:") + "\n")
 		for _, c := range m.sonCatismalar {
-			sb.WriteString("  " + stErr.Render(c) + "\n")
+			b.WriteString("  " + ui.S.Error.Render(safe(c)) + "\n")
 		}
-		sb.WriteString(stMuted.Render("Çalışma klasöründe bu dosyaları <<<<<<< / ======= / >>>>>>> işaretlerine göre düzenleyip Kaydet'e bas.") + "\n\n")
+		b.WriteString(ui.S.Muted.Render(ui.Wrap("Bu dosyaları <<<<<<< / ======= / >>>>>>> işaretlerine göre düzenleyip kaydet (c).", ui.Measure(w))) + "\n")
 	}
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter birleştir   esc geri   ? yardım"))
-	return sb.String()
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "birleştir"), ui.H("esc", "geri")}
 }
 
-func (m model) viewPullIste() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Üyeden Çek İste (Pull) — "+safe(m.aktifProje.Ad)) + "\n\n")
-	if len(m.uyelerHar) == 0 {
-		sb.WriteString(stMuted.Render("Grupta başka üye yok.") + "\n")
+// ─── Dosyalar ───────────────────────────────────────────────────────────────
+
+func (m model) viewDosyaListesi(w int) (string, []ui.Hint) {
+	var b strings.Builder
+	if len(m.dosyaListesi) == 0 {
+		b.WriteString(ui.S.Muted.Render("Çalışma klasöründe henüz dosya yok — n ile oluştur.") + "\n")
 	}
-	for i, u := range m.uyelerHar {
-		durum := stDim.Render("çevrimdışı")
-		if m.cevrimici[u.PeerID] {
-			durum = stOk.Render("çevrimiçi")
+	satirlar := make([]string, len(m.dosyaListesi))
+	for i, d := range m.dosyaListesi {
+		segs := []ui.Seg{ui.T(safe(d))}
+		if d == m.dosyaSilOnayi {
+			segs = append(segs, ui.Seg{Text: "  silmek için tekrar d", Color: ui.P.Error, Fixed: true})
 		}
-		line := safe(u.Ad) + "  " + durum
-		if i == m.pullIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
-		}
+		satirlar[i] = ui.Row(w, i == m.dosyaIdx, segs...)
 	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter çek isteği gönder   esc geri   ? yardım"))
-	return sb.String()
+	b.WriteString(pencereli(satirlar, m.dosyaIdx, m.govdeYuksekligi()) + "\n")
+	return b.String(), []ui.Hint{ui.H("↑↓", "seç"), ui.H("enter", "düzenle"), ui.H("n", "yeni dosya"), ui.H("d", "sil (iki kez)"), ui.H("esc", "geri")}
+}
+
+// ─── Diyaloglar ─────────────────────────────────────────────────────────────
+
+// diyalog, içeriği ekranın ortasında kenarlıklı bir kutuda gösterir.
+func (m model) diyalog(icerik string, kenar lipgloss.TerminalColor) string {
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(kenar).Padding(1, 3).Render(icerik)
+	if m.w > 0 && m.h > 0 {
+		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
+	}
+	return box
 }
 
 func (m model) viewDosyaOnay() string {
@@ -510,34 +890,30 @@ func (m model) viewDosyaOnay() string {
 		return ""
 	}
 	c := m.pendingConsent
-	gonderen := c.SenderID
-	if r := []rune(gonderen); len(r) > 20 {
-		gonderen = string(r[:8]) + "…" + string(r[len(r)-8:])
-	}
-	stBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("220")).Padding(1, 3)
-
-	var sb strings.Builder
-	sb.WriteString(stWarn.Render("Bilinmeyen Gönderenden Dosya Transfer İsteği") + "\n\n")
-	sb.WriteString(fmt.Sprintf("Gönderen : %s\n", stDim.Render(safe(gonderen))))
-	sb.WriteString(fmt.Sprintf("Dosya    : %s\n", safe(c.Filename)))
-	sb.WriteString(fmt.Sprintf("Boyut    : %d bayt\n\n", c.Size))
-	sb.WriteString(stMuted.Render("Bu gönderen, bulunduğun hiçbir grubun üyesi olarak tanınmıyor.") + "\n\n")
-	sb.WriteString(stOk.Render("[y] Kabul") + "   " + stErr.Render("[n] Reddet"))
-
-	box := stBox.Render(sb.String())
-	if m.w > 0 && m.h > 0 {
-		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
-	}
-	return box
+	var b strings.Builder
+	b.WriteString(ui.S.Warning.Bold(true).Render("Bilinmeyen gönderenden dosya") + "\n\n")
+	b.WriteString(ui.KV(10, "Gönderen", ui.S.Muted.Render(kisaPeer(safe(c.SenderID)))) + "\n")
+	b.WriteString(ui.KV(10, "Dosya", safe(c.Filename)) + "\n")
+	b.WriteString(ui.KV(10, "Boyut", boyutYaz(c.Size)) + "\n\n")
+	b.WriteString(ui.S.Muted.Render("Bu gönderen, bulunduğun hiçbir grubun üyesi değil.") + "\n\n")
+	b.WriteString(ui.S.Key.Render("y") + " " + ui.S.KeyDesc.Render("kabul et") + ui.S.Subtle.Render(" · ") + ui.S.Key.Render("n") + " " + ui.S.KeyDesc.Render("reddet"))
+	return m.diyalog(b.String(), ui.P.Warning)
 }
 
-// viewOnay, üç yıkıcı işlem için ortak onay kutusunu gösterir: gruptan
-// çık/grubu kapat, dal değiştir, birleştir. Hangisi olduğu m.onayTip'e göre
-// belirlenir (bkz. keyOnay).
-func (m model) viewOnay() string {
-	stBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("196")).Padding(1, 3)
+func boyutYaz(n int64) string {
+	switch {
+	case n < 1024:
+		return fmt.Sprintf("%d B", n)
+	case n < 1024*1024:
+		return fmt.Sprintf("%.1f KB", float64(n)/1024)
+	}
+	return fmt.Sprintf("%.1f MB", float64(n)/1024/1024)
+}
 
-	var sb strings.Builder
+// viewOnay, yıkıcı işlemler için ortak onay kutusudur (bkz. keyOnay).
+func (m model) viewOnay() string {
+	var baslik string
+	var satirlar []string
 	switch m.onayTip {
 	case onayGrupCikKapat:
 		if m.aktifGrup == nil {
@@ -545,139 +921,73 @@ func (m model) viewOnay() string {
 		}
 		g := m.aktifGrup
 		if g.yetkiliMi(m.identity.PeerID) {
-			sb.WriteString(stWarn.Render("Grubu Kapat") + "\n\n")
-			sb.WriteString(fmt.Sprintf("\"%s\" grubunu kapatmak üzeresin.\n", safe(g.Ad)))
-			sb.WriteString(stMuted.Render("Tüm üyelere bildirilir ve grup herkesin listesinden kalkar.") + "\n")
-			sb.WriteString(stMuted.Render("Proje dosyaların diskte kalır, kaybolmaz.") + "\n\n")
+			baslik = "Grubu kapat"
+			satirlar = []string{fmt.Sprintf("\"%s\" grubunu kapatmak üzeresin.", safe(g.Ad)),
+				"Tüm üyelere bildirilir ve grup herkesin listesinden kalkar."}
 		} else {
-			sb.WriteString(stWarn.Render("Gruptan Çık") + "\n\n")
-			sb.WriteString(fmt.Sprintf("\"%s\" grubundan çıkmak üzeresin.\n", safe(g.Ad)))
-			sb.WriteString(stMuted.Render("Kurucuya ve yöneticilere bildirilir, üye listesinden çıkarılırsın.") + "\n")
-			sb.WriteString(stMuted.Render("Proje dosyaların diskte kalır, kaybolmaz.") + "\n\n")
+			baslik = "Gruptan çık"
+			satirlar = []string{fmt.Sprintf("\"%s\" grubundan çıkmak üzeresin.", safe(g.Ad)),
+				"Kurucuya ve yöneticilere bildirilir, üye listesinden çıkarılırsın."}
 		}
+		satirlar = append(satirlar, "Proje dosyaların diskte kalır, kaybolmaz.")
 	case onayDalDegistir:
 		hedef := ""
 		if m.dalIdx < len(m.dallar) {
 			hedef = m.dallar[m.dalIdx]
 		}
-		sb.WriteString(stWarn.Render("Dal Değiştir") + "\n\n")
-		sb.WriteString(fmt.Sprintf("\"%s\" dalına geçmek üzeresin.\n", safe(hedef)))
-		sb.WriteString(stMuted.Render("Çalışma klasöründeki İZLENMEYEN ve .projeagignore ile YOK SAYILAN dosyalar") + "\n")
-		sb.WriteString(stMuted.Render("dahil her şey silinip hedef dalın içeriğiyle değiştirilecek.") + "\n\n")
+		baslik = "Dal değiştir"
+		satirlar = []string{fmt.Sprintf("⎇ %s dalına geçmek üzeresin.", safe(hedef)),
+			"Çalışma klasöründeki İZLENMEYEN ve .projeagignore ile YOK SAYILAN",
+			"dosyalar dahil her şey silinip hedef dalın içeriğiyle değiştirilir."}
 	case onayBirlestir:
 		anahtar := ""
 		if m.uzakIdx < len(m.uzakAnahtarlari) {
 			anahtar = m.uzakAnahtarlari[m.uzakIdx]
 		}
-		sb.WriteString(stWarn.Render("Uzak Dalı Birleştir") + "\n\n")
-		sb.WriteString(fmt.Sprintf("%s ile birleştirmek üzeresin.\n", safe(anahtar)))
-		sb.WriteString(stMuted.Render("Çalışma klasöründeki İZLENMEYEN ve .projeagignore ile YOK SAYILAN dosyalar") + "\n")
-		sb.WriteString(stMuted.Render("dahil her şey silinip birleştirme sonucuyla değiştirilecek.") + "\n\n")
+		peer, dal, _ := strings.Cut(anahtar, "/")
+		baslik = "Uzak dalı birleştir"
+		satirlar = []string{fmt.Sprintf("%s kişisinin ⎇ %s ucunu etkin dalınla birleştirmek üzeresin.", m.uyeAdi(peer), safe(dal)),
+			"Çalışma klasöründeki İZLENMEYEN ve .projeagignore ile YOK SAYILAN",
+			"dosyalar dahil her şey silinip birleştirme sonucuyla değiştirilir."}
+	case onayGeriAl:
+		baslik = "Değişikliği geri al"
+		satirlar = []string{safe(m.geriAlYol),
+			"Dosya son kayıttaki hâline döner; son kayıtta yoksa silinir.",
+			"Kaydedilmemiş değişiklik kalıcı olarak kaybolur."}
+	case onayDalSil:
+		ad := ""
+		if m.dalIdx < len(m.dallar) {
+			ad = m.dallar[m.dalIdx]
+		}
+		baslik = "Dalı sil"
+		satirlar = []string{fmt.Sprintf("⎇ %s dalını silmek üzeresin.", safe(ad)),
+			"Kayıtlar geçmişte durur; yalnızca dalın adı kalkar."}
 	}
+	var b strings.Builder
+	b.WriteString(ui.S.Warning.Bold(true).Render(baslik) + "\n\n")
+	for i, s := range satirlar {
+		if i == 0 {
+			b.WriteString(s + "\n")
+		} else {
+			b.WriteString(ui.S.Muted.Render(s) + "\n")
+		}
+	}
+	b.WriteString("\n")
 	if m.pending {
-		sb.WriteString(stFocused.Render(m.spinner.View()) + " " + stDim.Render("İşleniyor…") + "\n\n")
+		b.WriteString(ui.S.Accent.Render(m.spinner.View()) + ui.S.Muted.Render(" İşleniyor…") + "\n\n")
 	}
-	sb.WriteString(stErr.Render("[y] Onayla") + "   " + stOk.Render("[n] Vazgeç"))
-
-	box := stBox.Render(sb.String())
-	if m.w > 0 && m.h > 0 {
-		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
-	}
-	return box
+	b.WriteString(ui.S.Key.Render("y") + " " + ui.S.KeyDesc.Render("onayla") + ui.S.Subtle.Render(" · ") + ui.S.Key.Render("n") + " " + ui.S.KeyDesc.Render("vazgeç"))
+	return m.diyalog(b.String(), ui.P.Error)
 }
 
-// viewYardim, ? ile açılan genel kısayol yardım kutusunu gösterir — içeriği
-// yardıma girmeden önceki ekranın (m.yardimGeriEkran) kısayollarıdır.
+// viewYardim, ? ile açılan kısayol kutusudur; içeriği önceki ekranınkidir.
 func (m model) viewYardim() string {
-	stBox := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("63")).Padding(1, 3)
-
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("Kısayollar") + "\n\n")
+	var b strings.Builder
+	b.WriteString(ui.S.Title.Render("Kısayollar") + "\n\n")
 	for _, k := range m.kisayollarIcin(m.yardimGeriEkran) {
-		sb.WriteString(fmt.Sprintf("  %s  %s\n", stBold.Render(fmt.Sprintf("%-10s", k.tus)), k.aciklama))
+		b.WriteString(ui.S.Key.Render(fmt.Sprintf("%-16s", k.tus)) + " " + k.aciklama + "\n")
 	}
-	sb.WriteString("\n" + stMuted.Render("Her zaman: ctrl+c çıkış") + "\n\n")
-	sb.WriteString(stDim.Render("herhangi bir tuşa bas — geri dön"))
-
-	box := stBox.Render(sb.String())
-	if m.w > 0 && m.h > 0 {
-		return lipgloss.Place(m.w, m.h, lipgloss.Center, lipgloss.Center, box)
-	}
-	return box
-}
-
-func (m model) viewYoneticiSecim() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Yönetici Ata/Kaldır — "+safe(m.aktifGrup.Ad)) + "\n\n")
-	sb.WriteString(stMuted.Render("Yöneticiler, kurucu gibi üye davet edebilir ve grubu kapatabilir — kurucuya ulaşılamazsa grup yönetimsiz kalmasın diye.") + "\n\n")
-	if len(m.yoneticiHar) == 0 {
-		sb.WriteString(stMuted.Render("Grupta başka üye yok.") + "\n")
-	}
-	for i, u := range m.yoneticiHar {
-		etiket := ""
-		if m.aktifGrup.yoneticiMi(u.PeerID) {
-			etiket = stOk.Render(" (yönetici)")
-		}
-		line := safe(u.Ad) + etiket
-		if i == m.yoneticiIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
-		}
-	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter yönetici yap/kaldır   esc geri   ? yardım"))
-	return sb.String()
-}
-
-func (m model) viewDosyaListesi() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Dosyalar — "+safe(m.aktifProje.Ad)) + "\n\n")
-	if len(m.dosyaListesi) == 0 {
-		sb.WriteString(stMuted.Render("Çalışma klasöründe henüz dosya yok — n ile oluşturabilirsin.") + "\n")
-	}
-	for i, d := range m.dosyaListesi {
-		line := d
-		if i == m.dosyaIdx {
-			sb.WriteString(stSel.Render("▶ "+line) + "\n")
-		} else {
-			sb.WriteString("  " + line + "\n")
-		}
-	}
-	sb.WriteString("\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("↑/↓ seç   enter düzenle   n yeni dosya   d sil (iki kez)   esc geri   ? yardım"))
-	return sb.String()
-}
-
-func (m model) viewYeniDosya() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Yeni Dosya — "+safe(m.aktifProje.Ad)) + "\n\n")
-	sb.WriteString(stBorder.Render(m.yeniDosyaIn.View()) + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter oluştur ve düzenle   esc geri"))
-	return sb.String()
-}
-
-func (m model) viewDosyaDuzenle() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Düzenle — "+safe(m.dosyaDuzenleYol)) + "\n\n")
-	sb.WriteString(m.dosyaDuzenleTA.View() + "\n\n")
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("ctrl+s kaydet   esc listeye dön"))
-	return sb.String()
-}
-
-func (m model) viewDisaAktar() string {
-	var sb strings.Builder
-	sb.WriteString(stTitle.Render("AND — Dışa Aktar (.zip) — "+safe(m.aktifProje.Ad)) + "\n\n")
-	sb.WriteString(stMuted.Render("Projenin tüm geçmişi (nesneler + çalışma klasörü) tek bir .zip dosyasına paketlenir.") + "\n\n")
-	sb.WriteString(stBorder.Render(m.disaAktarIn.View()) + "\n\n")
-	if m.pending {
-		sb.WriteString(stFocused.Render(m.spinner.View()) + " " + stDim.Render("Paketleniyor…") + "\n")
-	}
-	m.yazBildirim(&sb)
-	sb.WriteString(stDim.Render("enter dışa aktar   esc geri"))
-	return sb.String()
+	b.WriteString("\n" + ui.S.Muted.Render("Her zaman: ctrl+c çıkış") + "\n\n")
+	b.WriteString(ui.S.Subtle.Render("herhangi bir tuş — geri dön"))
+	return m.diyalog(b.String(), ui.P.Accent)
 }

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/internal/ui"
 )
 
 // ─── Ekranlar ──────────────────────────────────────────────────────────────
@@ -34,7 +36,7 @@ const (
 	ekGunluk
 	ekDallar
 	ekYeniDal
-	ekDiffListesi
+	ekKayit
 	ekDiff
 	ekGonderSecim
 	ekUzakDallar
@@ -62,6 +64,8 @@ const (
 	onayGrupCikKapat onayTipi = iota
 	onayDalDegistir
 	onayBirlestir
+	onayGeriAl // çalışma klasöründeki bir değişikliği geri al (m.geriAlYol)
+	onayDalSil // bir dalı sil (m.dallar[m.dalIdx])
 )
 
 // bekleyenDavet, kabul edilmemiş bir grup davetidir. store.go'daki
@@ -175,6 +179,46 @@ type disaAktarSonucu struct {
 	err error
 }
 
+// projeOzeti, proje panelinin üst kartıdır: aktif dalın son kaydı,
+// çalışma klasörünün durumu ve her uzak uçta yerelde olmayan kayıt sayısı.
+type projeOzeti struct {
+	projeID  string
+	son      *LogGirdisi
+	durum    DurumSonucu
+	uzakYeni map[string]int
+	hata     string
+}
+
+type projeOzetiSonucu struct{ ozet projeOzeti }
+
+// kayitDetayi, Günlük'te açılan bir kaydın ayrıntısıdır.
+type kayitDetayi struct {
+	hash          string
+	commit        Commit
+	degisiklikler []DosyaDegisikligi
+	idx           int
+}
+
+type kayitSonucu struct {
+	projeID string
+	detay   kayitDetayi
+	err     error
+}
+
+type geriAlSonucu struct {
+	projeID string
+	yol     string
+	err     error
+}
+
+// sonKayit, ana menüdeki "Son kayıtlar" listesinin bir satırıdır.
+type sonKayit struct {
+	grup, proje string
+	LogGirdisi
+}
+
+type sonKayitlarSonucu struct{ kayitlar []sonKayit }
+
 // ─── Model ────────────────────────────────────────────────────────────────────
 
 type model struct {
@@ -216,24 +260,41 @@ type model struct {
 
 	projePanelIdx int
 
-	durum        DurumSonucu
-	durumSonraki ekran
+	durum     DurumSonucu
+	durumIdx  int
+	geriAlYol string
+
+	// ozet: proje panelinin üst kartı (bkz. projeOzetiCmd); nil iken hesaplanıyor.
+	ozet *projeOzeti
+	// projeSonKayit: grup panelinde her projenin son kaydı (proje ID → kayıt).
+	projeSonKayit map[string]LogGirdisi
+	// sonKayitlar: ana menüdeki, tüm projelerin en yeni kayıtları.
+	sonKayitlar []sonKayit
+	// esler: bağlı eşler (davet ekranında AND düğümleri önerilir).
+	esler    []pluginapi.PeerInfo
+	oneriIdx int
 
 	commitMsgIn textinput.Model
 
 	gunluk           []LogGirdisi
-	gunlukVP         viewport.Model
+	gunlukIdx        int
 	gunlukAramaAktif bool
 	gunlukAramaIn    textinput.Model
+	kayit            kayitDetayi
 
 	yeniDalIn textinput.Model
 	dalIdx    int
 	dallar    []string
+	// dalSon: Dallar ekranında her dalın son kaydı.
+	dalSon map[string]LogGirdisi
+	// dalKaynak: yeni dalın başlayacağı kayıt; boşsa aktif dalın son kaydı.
+	dalKaynak string
 
-	diffDosyalar []string
-	diffIdx      int
-	diffVP       viewport.Model
-	diffBaslik   string
+	diffVP      viewport.Model
+	diffBaslik  string
+	diffGeri    ekran
+	diffEklenen int
+	diffSilinen int
 
 	pushIdx   int
 	pullIdx   int
@@ -312,6 +373,13 @@ func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {
 
 	sp := spinner.New(spinner.WithSpinner(spinner.Dot))
 
+	// Giriş kutuları ve düzenleyici AND'ın etkin temasıyla çizilir.
+	for _, in := range []*textinput.Model{&grupAdIn, &grupAramaIn, &uyeDavetIn, &projeAdIn, &commitMsgIn,
+		&yeniDalIn, &yeniDosyaIn, &gunlukAramaIn, &disaAktarIn} {
+		ui.StyleInput(in)
+	}
+	ui.StyleTextarea(&dosyaDuzenleTA)
+
 	return model{
 		client:             c,
 		identity:           id,
@@ -329,6 +397,7 @@ func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {
 		disaAktarIn:        disaAktarIn,
 		cevrimici:          map[string]bool{},
 		spinner:            sp,
+		gruplar:            gruplariListele(dataDir),
 		bekleyenDavetler:   davetleriYukle(dataDir),
 		gonderilenDavetler: davetDefteriniOku(dataDir, time.Now()),
 		imlec:              imleciOku(dataDir),
@@ -400,26 +469,30 @@ func (m model) kisayollarIcin(e ekran) []kisayol {
 	case ekDavetler:
 		return []kisayol{{"↑/↓", "davet seç"}, {"a", "kabul et"}, {"r", "reddet"}, {"esc", "geri"}}
 	case ekProjePaneli:
-		return []kisayol{{"↑/↓", "işlem seç"}, {"enter", "çalıştır"}, {"esc", "geri"}}
+		ks := []kisayol{{"↑/↓", "işlem seç"}, {"enter", "çalıştır"}}
+		for _, is := range projeIslemleri {
+			ks = append(ks, kisayol{is.tus, is.ad})
+		}
+		return append(ks, kisayol{"esc", "geri"})
 	case ekDurum:
-		return []kisayol{{"esc", "geri"}}
+		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "farkı göster"}, {"g", "değişikliği geri al"}, {"c", "kaydet (commit)"}, {"r", "yenile"}, {"esc", "geri"}}
 	case ekGunluk:
 		if m.gunlukAramaAktif {
 			return nil
 		}
-		return []kisayol{{"↑/↓", "kaydır"}, {"/", "ara"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", "kayıt seç"}, {"enter", "kaydın ayrıntısı"}, {"/", "ara"}, {"esc", "geri"}}
+	case ekKayit:
+		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "dosyanın bu kayıttaki farkı"}, {"b", "bu kayıttan yeni dal"}, {"esc", "günlüğe dön"}}
 	case ekDallar:
-		return []kisayol{{"↑/↓", "dal seç"}, {"enter", "dala geç"}, {"n", "yeni dal"}, {"esc", "geri"}}
-	case ekDiffListesi:
-		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "farkı göster"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", "dal seç"}, {"enter", "dala geç"}, {"n", "yeni dal"}, {"d", "dalı sil"}, {"esc", "geri"}}
 	case ekDiff:
-		return []kisayol{{"↑/↓", "kaydır"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓, pgup/pgdn", "kaydır"}, {"esc", "geri"}}
 	case ekGonderSecim:
 		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "gönder"}, {"a", "çevrimiçi herkese gönder"}, {"esc", "geri"}}
 	case ekUzakDallar:
 		return []kisayol{{"↑/↓", "uç seç"}, {"enter", "birleştir"}, {"esc", "geri"}}
 	case ekPullIste:
-		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "çek isteği gönder"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "çek isteği gönder"}, {"a", "çevrimiçi herkesten iste"}, {"esc", "geri"}}
 	case ekYoneticiSecim:
 		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "yönetici yap/kaldır"}, {"esc", "geri"}}
 	case ekDosyaListesi:
@@ -437,7 +510,113 @@ func (m model) Init() tea.Cmd {
 		filePollCmd(m.client),
 		consentPollCmd(m.client),
 		peersPollCmd(m.client),
+		sonKayitlarCmd(m.dataDir),
 	)
+}
+
+// projeIslemi, proje panelindeki bir işlemdir; tus, listede seçmeden doğrudan
+// çalıştıran kısayoldur.
+type projeIslemi struct {
+	tus, ad, aciklama string
+}
+
+var projeIslemleri = []projeIslemi{
+	{"d", "Değişiklikler", "kaydedilmemiş değişiklikler, farklar, geri alma"},
+	{"c", "Kaydet (Commit)", "çalışma klasörünün anlık görüntüsünü al"},
+	{"l", "Günlük", "kayıt geçmişi ve her kaydın ayrıntısı"},
+	{"b", "Dallar", "dal oluştur, geç, sil"},
+	{"p", "Gönder (Push)", "yeni kayıtları üyelere gönder"},
+	{"m", "Uzak Dallar (Birleştir)", "üyelerden gelen değişiklikleri birleştir"},
+	{"u", "Üyeden Çek İste (Pull)", "bir üyeden değişikliklerini iste"},
+	{"f", "Dosyalar (Düzenle)", "AND'dan çıkmadan dosya düzenle"},
+	{"o", "Çalışma Klasörünü Aç", "dosya yöneticisinde aç"},
+	{"e", "Dışa Aktar (.zip)", "tüm geçmişi tek dosyaya paketle"},
+}
+
+// projeOzetiCmd, proje panelinin üst kartını hesaplar: son kayıt, çalışma
+// klasörünün durumu ve her uzak uçta yerelde olmayan kayıt sayısı.
+func projeOzetiCmd(dataDir string, p Proje, calismaDir string) tea.Cmd {
+	head := p.Dallar[p.AktifDal]
+	uzaklar := make(map[string]string, len(p.Uzaklar))
+	for k, v := range p.Uzaklar {
+		uzaklar[k] = v
+	}
+	return func() tea.Msg {
+		oz := projeOzeti{projeID: p.ID, uzakYeni: map[string]int{}}
+		headTree, err := headTreeOf(dataDir, p.ID, head)
+		if err != nil {
+			oz.hata = describeErr(err)
+			return projeOzetiSonucu{oz}
+		}
+		if head != "" {
+			if c, err := commitOku(dataDir, p.ID, head); err == nil {
+				oz.son = &LogGirdisi{Hash: head, Commit: c}
+			}
+		}
+		if oz.durum, err = durumHesapla(dataDir, p.ID, calismaDir, headTree); err != nil {
+			oz.hata = describeErr(err)
+		}
+		yerel := atalariTopla(dataDir, p.ID, head)
+		for k, h := range uzaklar {
+			oz.uzakYeni[k] = yeniKayitSay(dataDir, p.ID, yerel, h)
+		}
+		return projeOzetiSonucu{oz}
+	}
+}
+
+// sonKayitlarCmd, tüm grupların tüm projelerinden en yeni kayıtları toplar
+// (ana menüdeki "Son kayıtlar").
+func sonKayitlarCmd(dataDir string) tea.Cmd {
+	return func() tea.Msg {
+		var out []sonKayit
+		for _, g := range gruplariListele(dataDir) {
+			for _, p := range projeleriListele(dataDir, g.ID) {
+				for _, k := range gunlukAl(dataDir, p.ID, p.Dallar[p.AktifDal], 3) {
+					out = append(out, sonKayit{grup: g.Ad, proje: p.Ad, LogGirdisi: k})
+				}
+			}
+		}
+		sort.SliceStable(out, func(i, j int) bool { return out[i].Commit.TS.After(out[j].Commit.TS) })
+		if len(out) > 6 {
+			out = out[:6]
+		}
+		return sonKayitlarSonucu{kayitlar: out}
+	}
+}
+
+// sonKayitlari, projelerin aktif dallarının son kayıtlarıdır (grup paneli).
+func sonKayitlari(dataDir string, projeler []Proje) map[string]LogGirdisi {
+	out := map[string]LogGirdisi{}
+	for _, p := range projeler {
+		if k := gunlukAl(dataDir, p.ID, p.Dallar[p.AktifDal], 1); len(k) > 0 {
+			out[p.ID] = k[0]
+		}
+	}
+	return out
+}
+
+func kayitCmd(dataDir, projeID, hash string) tea.Cmd {
+	return func() tea.Msg {
+		c, dd, err := kayitDegisiklikleri(dataDir, projeID, hash)
+		return kayitSonucu{projeID: projeID, detay: kayitDetayi{hash: hash, commit: c, degisiklikler: dd}, err: err}
+	}
+}
+
+func kayitDiffCmd(dataDir, projeID, hash, yol string) tea.Cmd {
+	return func() tea.Msg {
+		satirlar, err := kayitDosyaFarki(dataDir, projeID, hash, yol)
+		return diffSonucu{satirlar: satirlar, err: err}
+	}
+}
+
+func geriAlCmd(dataDir, projeID, calismaDir, head, yol string) tea.Cmd {
+	return func() tea.Msg {
+		headTree, err := headTreeOf(dataDir, projeID, head)
+		if err == nil {
+			err = degisikligiGeriAl(dataDir, projeID, calismaDir, headTree, yol)
+		}
+		return geriAlSonucu{projeID: projeID, yol: yol, err: err}
+	}
 }
 
 // ─── Async komutlar ───────────────────────────────────────────────────────────
@@ -951,38 +1130,26 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 
 // ─── Update ───────────────────────────────────────────────────────────────────
 
-func gunlukMetni(girdiler []LogGirdisi) string {
-	var sb strings.Builder
-	for _, g := range girdiler {
-		birlesme := ""
-		if len(g.Commit.Ebeveynler) > 1 {
-			birlesme = stMod.Render(" [birleştirme]")
-		}
-		sb.WriteString(stBold.Render(kisaHash(g.Hash)) + "  " +
-			stDim.Render(g.Commit.TS.Local().Format("2006-01-02 15:04")) + "  " +
-			g.Commit.Yazar + birlesme + "\n")
-		sb.WriteString("  " + safe(g.Commit.Mesaj) + "\n\n")
-	}
-	if len(girdiler) == 0 {
-		sb.WriteString(stMuted.Render("Henüz kayıt yok.\n"))
-	}
-	return sb.String()
-}
-
+// diffMetni, farkı değişmeyen uzun bölümleri katlanmış olarak yazar (bkz.
+// diffKatla): eklenen satırlar yeşil "+", silinenler kırmızı "−", bağlam
+// soluk, katlanan bölümler "⋯ N satır aynı".
 func diffMetni(satirlar []DiffSatiri) string {
 	var sb strings.Builder
-	for _, s := range satirlar {
+	for _, s := range diffKatla(satirlar, diffBaglam) {
 		switch s.Tip {
 		case '+':
-			sb.WriteString(stAdd.Render("+ "+safe(s.Metin)) + "\n")
+			sb.WriteString(stAdd.Render("+ " + safe(s.Metin)))
 		case '-':
-			sb.WriteString(stDel.Render("- "+safe(s.Metin)) + "\n")
+			sb.WriteString(stDel.Render("− " + safe(s.Metin)))
+		case '@':
+			sb.WriteString(ui.S.Subtle.Render("  " + s.Metin))
 		default:
-			sb.WriteString(stDim.Render("  "+safe(s.Metin)) + "\n")
+			sb.WriteString(stDim.Render("  " + safe(s.Metin)))
 		}
+		sb.WriteByte('\n')
 	}
 	if len(satirlar) == 0 {
-		sb.WriteString(stMuted.Render("Fark yok.\n"))
+		sb.WriteString(stMuted.Render("İki taraf da boş: gösterilecek fark yok.") + "\n")
 	}
 	return sb.String()
 }

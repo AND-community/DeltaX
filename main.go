@@ -67,7 +67,7 @@ func describeErr(err error) string {
 var manifest = pluginapi.Manifest{
 	Name:        "DeltaX",
 	Label:       "DeltaX",
-	Version:     "1.5.0",
+	Version:     "1.6.0",
 	Description: "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
 	Author:      "AND",
 	Permissions: []string{pluginapi.IzinDM, pluginapi.IzinDosya},
@@ -136,47 +136,29 @@ func klasoruAc(yol string) error {
 
 // ─── Stiller ──────────────────────────────────────────────────────────────────
 
-// Stiller AND'ın ortak paletinden (internal/ui) türetilir — DeltaX, AND'ın
-// TUI'si ve diğer eklentilerle aynı temada görünür.
+// Görünümler doğrudan AND'ın ortak stillerini (ui.S) kullanır; aşağıdakiler
+// yalnızca giriş kutusu kartı ve fark satırları içindir.
 var (
-	stTitle   lipgloss.Style
-	stBold    lipgloss.Style
-	stSel     lipgloss.Style
-	stNormal  lipgloss.Style
-	stOk      lipgloss.Style
-	stErr     lipgloss.Style
-	stDim     lipgloss.Style
-	stMuted   lipgloss.Style
-	stFocused lipgloss.Style
-	stBorder  lipgloss.Style
-	stAdd     lipgloss.Style
-	stDel     lipgloss.Style
-	stMod     lipgloss.Style
-	stWarn    lipgloss.Style
+	stDim    lipgloss.Style
+	stMuted  lipgloss.Style
+	stBorder lipgloss.Style
+	stAdd    lipgloss.Style
+	stDel    lipgloss.Style
 )
 
 func init() { stilleriKur() }
 
 func stilleriKur() {
-	stTitle = ui.S.Title
-	stBold = ui.S.Bold
-	stSel = ui.S.Selected
-	stNormal = lipgloss.NewStyle()
-	stOk = ui.S.Success
-	stErr = ui.S.Error
 	stDim = ui.S.Muted
 	stMuted = ui.S.Muted
-	stFocused = ui.S.Title
 	stBorder = ui.S.CardFocus
 	stAdd = ui.S.Success
 	stDel = ui.S.Error
-	stMod = ui.S.Warning
-	stWarn = ui.S.Warning.Bold(true)
 }
 
 // uygulaTema, AND'ın GET /api/v1/theme'den döndürdüğü temayı ortak palete
-// uygular ve stilleri yeniden kurar. Hata/başarı/değişiklik (Ok/Err/Warn/
-// Add/Del/Mod) renkleri temadan etkilenmez — ui.Apply'ın kuralı.
+// uygular ve stilleri yeniden kurar. Hata/başarı renkleri temadan
+// etkilenmez — ui.Apply'ın kuralı.
 func uygulaTema(t pluginapi.ThemeReq) {
 	ui.Apply(ui.Theme(t))
 	stilleriKur()

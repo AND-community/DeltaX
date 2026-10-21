@@ -439,9 +439,18 @@ type DiffSatiri struct {
 	Metin string
 }
 
+// satirlar, içeriği satırlara böler; boş içerik (yeni eklenen ya da
+// silinen dosyanın yokluğu) hiç satır değildir, tek bir boş satır değil.
+func satirlar(data []byte) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	return strings.Split(string(data), "\n")
+}
+
 func satirDiff(eski, yeni []byte) []DiffSatiri {
-	a := strings.Split(string(eski), "\n")
-	b := strings.Split(string(yeni), "\n")
+	a := satirlar(eski)
+	b := satirlar(yeni)
 	n, m := len(a), len(b)
 
 	dp := make([][]int, n+1)

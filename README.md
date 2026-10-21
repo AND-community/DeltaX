@@ -33,6 +33,14 @@ AND, `Eklentiler/DeltaX/plugin.json` + yukarıdaki binary'yi otomatik keşfeder.
 
 Ana menüden **DeltaX**'ı seç.
 
+### Görünüm
+
+DeltaX, AND'ın kendisiyle aynı görsel dili kullanır: tam ekran çerçeve, her ekranın üstünde
+nerede olduğunu gösteren bir yol (`DeltaX › Grup › Proje › Günlük`), sağda etkin dal (`⎇ ana`,
+kaydedilmemiş değişiklik varsa `●`) ya da çevrimiçi üye sayısı, seçim çubuklu listeler ve altta
+o ekranın kısayolları. Uzun listeler ekrana sığacak kadar gösterilir ("↑ 3 daha"). Renkler AND'da
+seçili temadan gelir.
+
 ### Ana menü
 
 | Tuş | İşlev |
@@ -42,6 +50,8 @@ Ana menüden **DeltaX**'ı seç.
 | `q`/`esc` | Çık |
 
 Seçenekler: **Gruplarım**, **Yeni Grup Oluştur**, **Davetler**, **Kimlik Bilgileri**, **Çıkış**.
+Geniş bir terminalde sağda bir özet durur: grup sayısı, çevrimiçi grup arkadaşların, bekleyen
+davetler ve bütün projelerden **son kayıtlar**.
 
 ### Kısayol yardımı, ilerleme göstergesi ve onay pencereleri
 
@@ -53,7 +63,7 @@ Seçenekler: **Gruplarım**, **Yeni Grup Oluştur**, **Davetler**, **Kimlik Bilg
 ### Grup akışı
 
 1. **Yeni Grup Oluştur** — grup adını gir; rastgele bir grup anahtarı üretilir.
-2. Grup panelinde `i` ile bir üyeyi Peer ID'siyle davet et (kurucu ya da bir yönetici davet edebilir). Kişi çevrimdışıysa AND daveti giden kutusunda bekletir ve bağlandığında iletir (7 güne kadar).
+2. Grup panelinde `i` ile bir üyeyi Peer ID'siyle davet et (kurucu ya da bir yönetici davet edebilir). Ekranda o an bağlı, grupta olmayan **AND düğümleri** önerilir; `↑/↓` ile seçince Peer ID kutuya yazılır. Kişi çevrimdışıysa AND daveti giden kutusunda bekletir ve bağlandığında iletir (7 güne kadar).
 3. Davet edilen kişi **Davetler** ekranında `a` ile kabul eder (ya da `r` ile reddeder) — yanıt otomatik olarak davet edene bildirilir ve güncel üye listesi gruptaki herkese yeniden yayınlanır, böylece herkesin listesi yakınsar. Davet eden o sırada DeltaX'i kapatmış olsa da yanıt kaybolmaz: bir sonraki açılışta işlenir.
 4. Grup panelinde `n` ile yeni bir proje oluştur.
 
@@ -72,19 +82,29 @@ Her iki durumda da **proje dosyaların diskte kalır** — hiçbir yerel çalı�
 
 ### Proje paneli
 
-| Seçenek | Açıklama |
-|---------|----------|
-| Durum | Çalışma klasörü ile HEAD arasındaki eklenen/değişen/silinen dosyalar |
-| Kaydet (Commit) | Anlık görüntüyü al, mesaj yazıp yeni bir kayıt oluştur |
-| Günlük | Aktif daldaki kayıt geçmişi — `/` ile mesaj/yazar/hash'e göre canlı ara |
-| Dallar | Dal oluştur / dallar arasında geçiş yap (`n` yeni dal) |
-| Fark (Diff) | Değişen/yeni bir dosyanın satır bazlı farkı |
-| Gönder (Push) | Yeni kayıtları bir üyeye ya da çevrimiçi herkese şifreli paket olarak gönder |
-| Uzak Dallar (Birleştir) | Bir üyeden alınan değişiklikleri üç yönlü birleştirmeyle aktif dala uygula |
-| Üyeden Çek İste (Pull) | Bir üyeden kendi değişikliklerini sana göndermesini iste |
-| Dosyalar (Düzenle) | AND'dan çıkmadan dosya oluştur/düzenle/sil (gömülü metin düzenleyici) |
-| Çalışma Klasörünü Aç | Projenin dosyalarının bulunduğu klasörü sistem dosya yöneticisinde aç |
-| Dışa Aktar (.zip) | Projenin tüm geçmişini (nesneler + çalışma klasörü) tek bir .zip'e paketle |
+Panelin üstünde projenin durumu görünür: etkin dal, son kayıt (mesajı, yazarı, ne zaman), çalışma
+klasöründeki değişiklikler (`~2 değişen  +1 yeni`), çevrimiçi üyeler ve birleştirilmemiş kayıt
+taşıyan uzak uçlar. Her işlemin bir kısayolu vardır; listede seçmeden doğrudan çalışır.
+
+| Tuş | İşlem | Açıklama |
+|-----|-------|----------|
+| `d` | Değişiklikler | Kaydedilmemiş dosyalar; `enter` farkı gösterir, `g` değişikliği geri alır (dosya son kayıttaki hâline döner, yeni dosya silinir; onay ister), `c` kaydeder |
+| `c` | Kaydet (Commit) | Anlık görüntüyü al, mesaj yazıp yeni bir kayıt oluştur; ekranda neyin kaydedileceği görünür |
+| `l` | Günlük | Etkin daldaki kayıtlar; `/` ile mesaj/yazar/hash'e göre ara, `enter` ile **kaydın ayrıntısı** |
+| `b` | Dallar | Dalları son kayıtlarıyla listeler; `enter` dala geç, `n` yeni dal, `d` dalı sil (etkin dal silinemez; kayıtlar geçmişte kalır) |
+| `p` | Gönder (Push) | Yeni kayıtları bir üyeye ya da (`a`) çevrimiçi herkese şifreli paket olarak gönder; her üyenin bildiği son kayıt görünür |
+| `m` | Uzak Dallar (Birleştir) | Üyelerden gelen uçlar, her birinde **kaç yeni kayıt** olduğu ya da "güncel" olduğu; `enter` üç yönlü birleştirir |
+| `u` | Üyeden Çek İste (Pull) | Bir üyeden ya da (`a`) çevrimiçi herkesten değişikliklerini göndermesini iste |
+| `f` | Dosyalar (Düzenle) | AND'dan çıkmadan dosya oluştur/düzenle/sil (gömülü metin düzenleyici) |
+| `o` | Çalışma Klasörünü Aç | Projenin dosyalarının bulunduğu klasörü sistem dosya yöneticisinde aç |
+| `e` | Dışa Aktar (.zip) | Projenin tüm geçmişini (nesneler + çalışma klasörü) tek bir .zip'e paketle |
+
+**Kaydın ayrıntısı** (Günlük'te `enter`): kaydın tam kimliği, yazarı, tarihi, önceki kayıtları
+(birleştirme kaydıysa ikisi), mesajı ve değiştirdiği dosyalar. Bir dosyada `enter` o kayıtta neyin
+değiştiğini gösterir; `b` bu kayıttan yeni bir dal açar (eski bir sürüme dönüp oradan ilerlemek için).
+
+**Farklar** uzun dosyalarda yalnızca değişen yerleri ve çevresindeki üç satırı gösterir; aradaki
+değişmeyen bölümler "⋯ 42 satır aynı" olarak katlanır. Üstte eklenen ve silinen satır sayısı yazar.
 
 Projenin dosyaları **Çalışma Klasörü**'nde tutulur (proje panelinde yolu gösterilir) — dosyaları kendi editörünle ya da eklentinin **Dosyalar (Düzenle)** ekranıyla orada düzenle, sonra **Kaydet (Commit)** ile bir kayıt oluştur.
 
@@ -168,7 +188,7 @@ DeltaX grup mesajlarını AND'ın DM geçmişinden okur ve nereye kadar işledi�
 {
   "name":        "DeltaX",
   "label":       "DeltaX",
-  "version":     "1.5.0",
+  "version":     "1.6.0",
   "description": "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
   "author":      "AND"
 }
@@ -184,11 +204,12 @@ Kaynak kod: [Eklentiler/DeltaX/](.)
 |-------|--------|
 | `main.go` | Manifest, giriş noktası, stiller |
 | `model.go` | Bubble Tea modeli, async komutlar, DM zarf işleme (`zarfIsle`) |
-| `isleyiciler.go` | `Update`: mesaj türü başına işleyiciler |
+| `isleyiciler.go` | `Update`: mesaj türü başına işleyiciler; bir ekrana girilince özetini tazeler |
 | `gecmis.go` | DM geçmişinden okuma, imleç, gönderilen davetlerin defteri |
 | `istemci.go` | DeltaX'in kullandığı AND API'si (testlerde sahtesi kullanılır) |
 | `keys.go` | Ekran bazlı klavye olayı işleyicileri |
-| `view.go` | Ekran render fonksiyonları |
+| `view.go` | Ekranların görünümü (AND tasarım sistemi: başlık yolu, listeler, iki sütunlu paneller, diyaloglar) |
+| `inceleme.go` | Kaydın değiştirdiği dosyalar ve farkları, değişikliği geri alma, uzak uçtaki yeni kayıt sayısı, fark katlama, göreli zaman |
 | `store.go` | Grup/proje kalıcılığı |
 | `vcs.go` | İçerik-adresli nesne deposu, dal/commit/diff/birleştirme, günlük araması |
 | `crypto.go` | Grup sırrı AES-256-GCM şifreleme |
@@ -203,6 +224,7 @@ Kaynak kod: [Eklentiler/DeltaX/](.)
 
 | Sürüm | Değişiklik |
 |-------|------------|
+| 1.6.0 | Yeni görünüm: AND tasarım sistemi (başlık yolu, etkin dal, seçim çubuklu ve pencereli listeler, ana menüde özet ve son kayıtlar, grup panelinde projeler ve üyeler yan yana, proje panelinde durum kartı ve kısayollu işlemler). Kaydın ayrıntısı ve kayıttaki dosya farkı, kayıttan dal açma, değişikliği geri alma, dal silme, uzak uçlarda birleştirilmemiş kayıt sayısı, çevrimiçi herkesten çek isteme, davette bağlı AND düğümü önerileri, katlanmış farklar. Yeni ya da silinen dosyanın farkında çıkan sahte boş satır düzeltildi |
 | 1.5.0 | Grup mesajları kaçırılmaz: gelenler AND'ın DM geçmişinden okunur (kapalıyken gelenler açılışta işlenir), grup durumunu değiştirenler giden kutusuyla gider; gönderilen davetler diskte tutulur (30 gün), ret bildirilir; eski pull istekleri yanıtlanmaz; davet ederken Peer ID biçimi, kendini ve mevcut üyeyi davet etme denetlenir; makine mesajları Özel Chat'te ve AND'ın okunmamış sayısında görünmez |
 | 1.3.0 | Eklenti adı **ANDSnap**'den **DeltaX**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/DeltaX/` dahil) |
 | 1.2.0 | Eklenti adı **proje_ag**'den **ANDSnap**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/ANDSnap/` dahil) |
