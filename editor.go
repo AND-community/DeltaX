@@ -6,12 +6,15 @@ package main
 // dosyayı düzenlemek ancak "Kaydet (Commit)" ile bir kayda dönüşür.
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/lucian95511/and/dil"
 )
 
 const maxDuzenlenebilirBoyut = 2 * 1024 * 1024 // 2 MB — daha büyüğü TUI içi düzenleyiciyle açılmaz
@@ -57,7 +60,7 @@ func dosyaListesiOku(calismaDir string) ([]string, error) {
 
 func dosyaIcerigiOku(calismaDir, rel string) (string, error) {
 	if !gecerliGoreliYol(rel) {
-		return "", fmt.Errorf("geçersiz dosya yolu")
+		return "", errors.New(dil.T("geçersiz dosya yolu"))
 	}
 	full := filepath.Join(calismaDir, filepath.FromSlash(rel))
 	info, err := os.Stat(full)
@@ -65,7 +68,7 @@ func dosyaIcerigiOku(calismaDir, rel string) (string, error) {
 		return "", err
 	}
 	if info.Size() > maxDuzenlenebilirBoyut {
-		return "", fmt.Errorf("dosya çok büyük (%.1f MB) — TUI içi düzenleyiciyle açılamaz, harici bir editör kullan", float64(info.Size())/(1<<20))
+		return "", fmt.Errorf(dil.T("dosya çok büyük (%.1f MB) — TUI içi düzenleyiciyle açılamaz, harici bir editör kullan"), float64(info.Size())/(1<<20))
 	}
 	data, err := os.ReadFile(full)
 	return string(data), err
@@ -73,7 +76,7 @@ func dosyaIcerigiOku(calismaDir, rel string) (string, error) {
 
 func dosyaIcerigiYaz(calismaDir, rel, icerik string) error {
 	if !gecerliGoreliYol(rel) {
-		return fmt.Errorf("geçersiz dosya yolu")
+		return errors.New(dil.T("geçersiz dosya yolu"))
 	}
 	full := filepath.Join(calismaDir, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
@@ -84,7 +87,7 @@ func dosyaIcerigiYaz(calismaDir, rel, icerik string) error {
 
 func dosyaSil(calismaDir, rel string) error {
 	if !gecerliGoreliYol(rel) {
-		return fmt.Errorf("geçersiz dosya yolu")
+		return errors.New(dil.T("geçersiz dosya yolu"))
 	}
 	return os.Remove(filepath.Join(calismaDir, filepath.FromSlash(rel)))
 }

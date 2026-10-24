@@ -17,6 +17,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lucian95511/and/dil"
 )
 
 const pluginDirName = "DeltaX"
@@ -44,7 +46,7 @@ func davetlerYolu(dataDir string) string {
 
 func davetleriKaydet(dataDir string, davetler []bekleyenDavet) error {
 	if dataDir == "" {
-		return errors.New("AND_DATA_DIR tanımlı değil")
+		return errors.New(dil.T("AND_DATA_DIR tanımlı değil"))
 	}
 	if err := os.MkdirAll(kokDizin(dataDir), 0o700); err != nil {
 		return err
@@ -179,7 +181,7 @@ func grupSil(dataDir, id string) error {
 
 func grupKaydet(dataDir string, g Grup) error {
 	if dataDir == "" {
-		return errors.New("AND_DATA_DIR tanımlı değil")
+		return errors.New(dil.T("AND_DATA_DIR tanımlı değil"))
 	}
 	if err := os.MkdirAll(gruplarDizini(dataDir), 0o700); err != nil {
 		return err
@@ -289,7 +291,7 @@ func projeOlustur(dataDir, grupID, ad string) (Proje, error) {
 
 func projeKaydet(dataDir string, p Proje) error {
 	if dataDir == "" {
-		return errors.New("AND_DATA_DIR tanımlı değil")
+		return errors.New(dil.T("AND_DATA_DIR tanımlı değil"))
 	}
 	if err := os.MkdirAll(projeKokDizini(dataDir, p.ID), 0o700); err != nil {
 		return err

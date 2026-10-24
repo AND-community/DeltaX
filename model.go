@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/internal/pluginapi"
 	"github.com/lucian95511/and/internal/ui"
 )
@@ -332,39 +334,39 @@ type model struct {
 
 func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {
 	grupAdIn := textinput.New()
-	grupAdIn.Placeholder = "Grup adı…"
+	grupAdIn.Placeholder = dil.T("Grup adı…")
 	grupAdIn.CharLimit = 80
 
 	grupAramaIn := textinput.New()
-	grupAramaIn.Placeholder = "Ara (grup/kurucu adı)…"
+	grupAramaIn.Placeholder = dil.T("Ara (grup/kurucu adı)…")
 	grupAramaIn.CharLimit = 100
 
 	uyeDavetIn := textinput.New()
-	uyeDavetIn.Placeholder = "Davet edilecek kişinin peer ID'si (12D3Koo…)"
+	uyeDavetIn.Placeholder = dil.T("Davet edilecek kişinin peer ID'si (12D3Koo…)")
 	uyeDavetIn.CharLimit = 128
 
 	projeAdIn := textinput.New()
-	projeAdIn.Placeholder = "Proje adı…"
+	projeAdIn.Placeholder = dil.T("Proje adı…")
 	projeAdIn.CharLimit = 80
 
 	commitMsgIn := textinput.New()
-	commitMsgIn.Placeholder = "Kayıt (commit) mesajı…"
+	commitMsgIn.Placeholder = dil.T("Kayıt (commit) mesajı…")
 	commitMsgIn.CharLimit = 200
 
 	yeniDalIn := textinput.New()
-	yeniDalIn.Placeholder = "Yeni dal adı…"
+	yeniDalIn.Placeholder = dil.T("Yeni dal adı…")
 	yeniDalIn.CharLimit = 60
 
 	yeniDosyaIn := textinput.New()
-	yeniDosyaIn.Placeholder = "Göreli dosya yolu (ör. src/ana.go)…"
+	yeniDosyaIn.Placeholder = dil.T("Göreli dosya yolu (ör. src/ana.go)…")
 	yeniDosyaIn.CharLimit = 240
 
 	gunlukAramaIn := textinput.New()
-	gunlukAramaIn.Placeholder = "Ara (mesaj/yazar/hash)…"
+	gunlukAramaIn.Placeholder = dil.T("Ara (mesaj/yazar/hash)…")
 	gunlukAramaIn.CharLimit = 100
 
 	disaAktarIn := textinput.New()
-	disaAktarIn.Placeholder = "Hedef klasör…"
+	disaAktarIn.Placeholder = dil.T("Hedef klasör…")
 	disaAktarIn.CharLimit = 300
 	disaAktarIn.SetValue(varsayilanDisaAktarKlasoru())
 
@@ -445,58 +447,58 @@ func (m model) bildirGuncelle(mesaj string, hata bool) model {
 func (m model) kisayollarIcin(e ekran) []kisayol {
 	switch e {
 	case ekAnaMenu:
-		return []kisayol{{"↑/↓, j/k", "menüde gez"}, {"enter", "seç"}, {"q, esc", "çıkış"}}
+		return []kisayol{{"↑/↓, j/k", dil.T("menüde gez")}, {"enter", dil.T("seç")}, {"q, esc", dil.T("çıkış")}}
 	case ekKimlik:
-		return []kisayol{{"esc", "geri"}}
+		return []kisayol{{"esc", dil.T("geri")}}
 	case ekGrupListesi:
-		return []kisayol{{"↑/↓", "grup seç"}, {"enter", "grubu aç"}, {"/", "ara"}, {"r", "yenile"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("grup seç")}, {"enter", dil.T("grubu aç")}, {"/", dil.T("ara")}, {"r", dil.T("yenile")}, {"esc", dil.T("geri")}}
 	case ekGrupPaneli:
-		ks := []kisayol{{"↑/↓", "proje seç"}, {"enter", "projeyi aç"}, {"n", "yeni proje"}}
+		ks := []kisayol{{"↑/↓", dil.T("proje seç")}, {"enter", dil.T("projeyi aç")}, {"n", dil.T("yeni proje")}}
 		if m.aktifGrup != nil {
 			if m.aktifGrup.yetkiliMi(m.identity.PeerID) {
-				ks = append(ks, kisayol{"i", "üye davet et"})
+				ks = append(ks, kisayol{"i", dil.T("üye davet et")})
 			}
 			if m.aktifGrup.benKurucuMuyum(m.identity.PeerID) {
-				ks = append(ks, kisayol{"y", "yönetici ata/kaldır"})
+				ks = append(ks, kisayol{"y", dil.T("yönetici ata/kaldır")})
 			}
 			if m.aktifGrup.yetkiliMi(m.identity.PeerID) {
-				ks = append(ks, kisayol{"x", "grubu kapat"})
+				ks = append(ks, kisayol{"x", dil.T("grubu kapat")})
 			} else {
-				ks = append(ks, kisayol{"x", "gruptan çık"})
+				ks = append(ks, kisayol{"x", dil.T("gruptan çık")})
 			}
 		}
-		return append(ks, kisayol{"r", "yenile"}, kisayol{"esc", "geri"})
+		return append(ks, kisayol{"r", dil.T("yenile")}, kisayol{"esc", dil.T("geri")})
 	case ekDavetler:
-		return []kisayol{{"↑/↓", "davet seç"}, {"a", "kabul et"}, {"r", "reddet"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("davet seç")}, {"a", dil.T("kabul et")}, {"r", dil.T("reddet")}, {"esc", dil.T("geri")}}
 	case ekProjePaneli:
-		ks := []kisayol{{"↑/↓", "işlem seç"}, {"enter", "çalıştır"}}
+		ks := []kisayol{{"↑/↓", dil.T("işlem seç")}, {"enter", dil.T("çalıştır")}}
 		for _, is := range projeIslemleri {
-			ks = append(ks, kisayol{is.tus, is.ad})
+			ks = append(ks, kisayol{is.tus, dil.T(is.ad)})
 		}
-		return append(ks, kisayol{"esc", "geri"})
+		return append(ks, kisayol{"esc", dil.T("geri")})
 	case ekDurum:
-		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "farkı göster"}, {"g", "değişikliği geri al"}, {"c", "kaydet (commit)"}, {"r", "yenile"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("dosya seç")}, {"enter", dil.T("farkı göster")}, {"g", dil.T("değişikliği geri al")}, {"c", dil.T("kaydet (commit)")}, {"r", dil.T("yenile")}, {"esc", dil.T("geri")}}
 	case ekGunluk:
 		if m.gunlukAramaAktif {
 			return nil
 		}
-		return []kisayol{{"↑/↓", "kayıt seç"}, {"enter", "kaydın ayrıntısı"}, {"/", "ara"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("kayıt seç")}, {"enter", dil.T("kaydın ayrıntısı")}, {"/", dil.T("ara")}, {"esc", dil.T("geri")}}
 	case ekKayit:
-		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "dosyanın bu kayıttaki farkı"}, {"b", "bu kayıttan yeni dal"}, {"esc", "günlüğe dön"}}
+		return []kisayol{{"↑/↓", dil.T("dosya seç")}, {"enter", dil.T("dosyanın bu kayıttaki farkı")}, {"b", dil.T("bu kayıttan yeni dal")}, {"esc", dil.T("günlüğe dön")}}
 	case ekDallar:
-		return []kisayol{{"↑/↓", "dal seç"}, {"enter", "dala geç"}, {"n", "yeni dal"}, {"d", "dalı sil"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("dal seç")}, {"enter", dil.T("dala geç")}, {"n", dil.T("yeni dal")}, {"d", dil.T("dalı sil")}, {"esc", dil.T("geri")}}
 	case ekDiff:
-		return []kisayol{{"↑/↓, pgup/pgdn", "kaydır"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓, pgup/pgdn", dil.T("kaydır")}, {"esc", dil.T("geri")}}
 	case ekGonderSecim:
-		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "gönder"}, {"a", "çevrimiçi herkese gönder"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("üye seç")}, {"enter", dil.T("gönder")}, {"a", dil.T("çevrimiçi herkese gönder")}, {"esc", dil.T("geri")}}
 	case ekUzakDallar:
-		return []kisayol{{"↑/↓", "uç seç"}, {"enter", "birleştir"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("uç seç")}, {"enter", dil.T("birleştir")}, {"esc", dil.T("geri")}}
 	case ekPullIste:
-		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "çek isteği gönder"}, {"a", "çevrimiçi herkesten iste"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("üye seç")}, {"enter", dil.T("çek isteği gönder")}, {"a", dil.T("çevrimiçi herkesten iste")}, {"esc", dil.T("geri")}}
 	case ekYoneticiSecim:
-		return []kisayol{{"↑/↓", "üye seç"}, {"enter", "yönetici yap/kaldır"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("üye seç")}, {"enter", dil.T("yönetici yap/kaldır")}, {"esc", dil.T("geri")}}
 	case ekDosyaListesi:
-		return []kisayol{{"↑/↓", "dosya seç"}, {"enter", "düzenle"}, {"n", "yeni dosya"}, {"d", "sil (iki kez bas)"}, {"esc", "geri"}}
+		return []kisayol{{"↑/↓", dil.T("dosya seç")}, {"enter", dil.T("düzenle")}, {"n", dil.T("yeni dosya")}, {"d", dil.T("sil (iki kez bas)")}, {"esc", dil.T("geri")}}
 	}
 	return nil
 }
@@ -521,16 +523,16 @@ type projeIslemi struct {
 }
 
 var projeIslemleri = []projeIslemi{
-	{"d", "Değişiklikler", "kaydedilmemiş değişiklikler, farklar, geri alma"},
-	{"c", "Kaydet (Commit)", "çalışma klasörünün anlık görüntüsünü al"},
-	{"l", "Günlük", "kayıt geçmişi ve her kaydın ayrıntısı"},
-	{"b", "Dallar", "dal oluştur, geç, sil"},
-	{"p", "Gönder (Push)", "yeni kayıtları üyelere gönder"},
-	{"m", "Uzak Dallar (Birleştir)", "üyelerden gelen değişiklikleri birleştir"},
-	{"u", "Üyeden Çek İste (Pull)", "bir üyeden değişikliklerini iste"},
-	{"f", "Dosyalar (Düzenle)", "AND'dan çıkmadan dosya düzenle"},
-	{"o", "Çalışma Klasörünü Aç", "dosya yöneticisinde aç"},
-	{"e", "Dışa Aktar (.zip)", "tüm geçmişi tek dosyaya paketle"},
+	{"d", dil.K("Değişiklikler"), dil.K("kaydedilmemiş değişiklikler, farklar, geri alma")},
+	{"c", dil.K("Kaydet (Commit)"), dil.K("çalışma klasörünün anlık görüntüsünü al")},
+	{"l", dil.K("Günlük"), dil.K("kayıt geçmişi ve her kaydın ayrıntısı")},
+	{"b", dil.K("Dallar"), dil.K("dal oluştur, geç, sil")},
+	{"p", dil.K("Gönder (Push)"), dil.K("yeni kayıtları üyelere gönder")},
+	{"m", dil.K("Uzak Dallar (Birleştir)"), dil.K("üyelerden gelen değişiklikleri birleştir")},
+	{"u", dil.K("Üyeden Çek İste (Pull)"), dil.K("bir üyeden değişikliklerini iste")},
+	{"f", dil.K("Dosyalar (Düzenle)"), dil.K("AND'dan çıkmadan dosya düzenle")},
+	{"o", dil.K("Çalışma Klasörünü Aç"), dil.K("dosya yöneticisinde aç")},
+	{"e", dil.K("Dışa Aktar (.zip)"), dil.K("tüm geçmişi tek dosyaya paketle")},
 }
 
 // projeOzetiCmd, proje panelinin üst kartını hesaplar: son kayıt, çalışma
@@ -726,7 +728,7 @@ func kabulCmd(c istemci, dataDir string, davet bekleyenDavet, kendi Uye, kabul b
 func rosterYayinCmd(c istemci, g Grup, kendi Uye) tea.Cmd {
 	return func() tea.Msg {
 		if hatalar := uyeGuncellemesiYayinla(c, g, kendi); len(hatalar) > 0 {
-			return basitSonuc{islem: "roster", err: fmt.Errorf("%d üyeye ulaşılamadı", len(hatalar))}
+			return basitSonuc{islem: "roster", err: fmt.Errorf(dil.T("%d üyeye ulaşılamadı"), len(hatalar))}
 		}
 		return basitSonuc{islem: "roster"}
 	}
@@ -743,10 +745,10 @@ func grupTerkEtCmd(c istemci, dataDir string, g Grup, kendi Uye) tea.Cmd {
 		var agHatasi error
 		if kapatildi {
 			if hatalar := grupKapatBildir(c, g, kendi); len(hatalar) > 0 {
-				agHatasi = fmt.Errorf("%d üyeye ulaşılamadı", len(hatalar))
+				agHatasi = fmt.Errorf(dil.T("%d üyeye ulaşılamadı"), len(hatalar))
 			}
 		} else if hatalar := ayrilBildir(c, g, kendi); len(hatalar) > 0 {
-			agHatasi = fmt.Errorf("%d yetkiliye ulaşılamadı", len(hatalar))
+			agHatasi = fmt.Errorf(dil.T("%d yetkiliye ulaşılamadı"), len(hatalar))
 		}
 		if err := grupSil(dataDir, g.ID); err != nil {
 			return grupCikKapatSonucu{kapatildi: kapatildi, err: err}
@@ -786,7 +788,7 @@ func headTreeOf(dataDir, projeID, head string) (string, error) {
 	}
 	c, err := commitOku(dataDir, projeID, head)
 	if err != nil {
-		return "", fmt.Errorf("commit %s okunamadı: %w", kisaHash(head), err)
+		return "", fmt.Errorf(dil.T("commit %s okunamadı: %w"), kisaHash(head), err)
 	}
 	return c.Agac, nil
 }
@@ -805,7 +807,7 @@ func commitCmd(dataDir, projeID, calismaDir, head, yazar, mesaj string) tea.Cmd 
 			ebeveynler = append(ebeveynler, ikinci)
 		} else if head != "" {
 			if hc, err := commitOku(dataDir, projeID, head); err == nil && hc.Agac == yeniTree {
-				return commitSonucu{projeID: projeID, err: fmt.Errorf("kaydedilecek değişiklik yok")}
+				return commitSonucu{projeID: projeID, err: errors.New(dil.T("kaydedilecek değişiklik yok"))}
 			}
 		}
 		hash, err := commitOlustur(dataDir, projeID, yeniTree, ebeveynler, yazar, mesaj)
@@ -915,17 +917,17 @@ func birlestirCmd(dataDir, projeID, calismaDir, yerelHead, uzakHead, yazar strin
 			return birlestirSonucu{projeID: projeID, err: err}
 		}
 		if !durum.temizMi() {
-			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("önce mevcut değişiklikleri kaydet")}
+			return birlestirSonucu{projeID: projeID, err: errors.New(dil.T("önce mevcut değişiklikleri kaydet"))}
 		}
 
 		uzakCommit, err := commitOku(dataDir, projeID, uzakHead)
 		if err != nil {
-			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("uzak commit bulunamadı — önce Gönder/Çek ile nesneleri al: %w", err)}
+			return birlestirSonucu{projeID: projeID, err: fmt.Errorf(dil.T("uzak commit bulunamadı — önce Gönder/Çek ile nesneleri al: %w"), err)}
 		}
 
 		temel := ortakAta(dataDir, projeID, yerelHead, uzakHead)
 		if temel == uzakHead {
-			return birlestirSonucu{projeID: projeID, err: fmt.Errorf("zaten güncel")}
+			return birlestirSonucu{projeID: projeID, err: errors.New(dil.T("zaten güncel"))}
 		}
 		if temel == yerelHead {
 			if err := dalaGec(dataDir, projeID, calismaDir, uzakCommit.Agac); err != nil {
@@ -950,7 +952,7 @@ func birlestirCmd(dataDir, projeID, calismaDir, yerelHead, uzakHead, yazar strin
 		if err != nil {
 			return birlestirSonucu{projeID: projeID, err: err}
 		}
-		yeniHash, err := commitOlustur(dataDir, projeID, yeniTree, []string{yerelHead, uzakHead}, yazar, "Birleştirme: "+kisaHash(uzakHead))
+		yeniHash, err := commitOlustur(dataDir, projeID, yeniTree, []string{yerelHead, uzakHead}, yazar, dil.T("Birleştirme: ")+kisaHash(uzakHead))
 		if err != nil {
 			return birlestirSonucu{projeID: projeID, err: err}
 		}
@@ -996,7 +998,7 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 			if m.aktifGrup != nil && m.aktifGrup.ID == g.ID {
 				*m.aktifGrup = g
 			}
-			m = m.bildirGuncelle("\""+safe(dp.GrupAd)+"\" grubunun üye listesi güncellendi.", false)
+			m = m.bildirGuncelle(dil.F("\"%s\" grubunun üye listesi güncellendi.", safe(dp.GrupAd)), false)
 			return m, nil
 		}
 		if z.Tip == mUyeGuncelle {
@@ -1013,7 +1015,7 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 		}
 		m.bekleyenDavetler = append(m.bekleyenDavetler, bekleyenDavet{GrupID: z.GrupID, GonderenPeer: dp.Gonderen.PeerID, Payload: dp})
 		_ = davetleriKaydet(m.dataDir, m.bekleyenDavetler)
-		m = m.bildirGuncelle("Yeni grup daveti: "+safe(dp.GrupAd)+" (davet eden: "+safe(dp.Gonderen.Ad)+")", false)
+		m = m.bildirGuncelle(dil.F("Yeni grup daveti: %s (davet eden: %s)", safe(dp.GrupAd), safe(dp.Gonderen.Ad)), false)
 		return m, nil
 
 	case mDavetYanit:
@@ -1040,7 +1042,7 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 		m.gonderilenDavetler.sil(z.GrupID, verifiedSender)
 		m.gonderilenDavetler.kaydet(m.dataDir)
 		if !yp.Kabul {
-			m = m.bildirGuncelle(safe(yp.Uye.Ad)+" \""+safe(g.Ad)+"\" grubuna davetini reddetti.", false)
+			m = m.bildirGuncelle(dil.F("%s \"%s\" grubuna davetini reddetti.", safe(yp.Uye.Ad), safe(g.Ad)), false)
 			return m, nil
 		}
 		g.uyeEkleGuncelle(yp.Uye)
@@ -1048,13 +1050,13 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 		if m.aktifGrup != nil && m.aktifGrup.ID == g.ID {
 			*m.aktifGrup = g
 		}
-		m = m.bildirGuncelle(safe(yp.Uye.Ad)+" \""+safe(g.Ad)+"\" grubuna katıldı.", false)
+		m = m.bildirGuncelle(dil.F("%s \"%s\" grubuna katıldı.", safe(yp.Uye.Ad), safe(g.Ad)), false)
 		return m, rosterYayinCmd(m.client, g, m.kendiUye())
 
 	case mPushBildir:
 		var bp pushBildirPayload
 		if json.Unmarshal(z.Payload, &bp) == nil {
-			m = m.bildirGuncelle(fmt.Sprintf("Bir üye değişiklik gönderiyor (%s, %d nesne) — kabul edilince Uzak Dallar'da görünecek.", safe(bp.Dal), bp.NesneSayisi), false)
+			m = m.bildirGuncelle(dil.F("Bir üye değişiklik gönderiyor (%s, %d nesne) — kabul edilince Uzak Dallar'da görünecek.", safe(bp.Dal), bp.NesneSayisi), false)
 		}
 		return m, nil
 
@@ -1100,7 +1102,7 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 		if m.aktifGrup != nil && m.aktifGrup.ID == g.ID {
 			*m.aktifGrup = g
 		}
-		m = m.bildirGuncelle(safe(ap.Uye.Ad)+" \""+safe(g.Ad)+"\" grubundan ayrıldı.", false)
+		m = m.bildirGuncelle(dil.F("%s \"%s\" grubundan ayrıldı.", safe(ap.Uye.Ad), safe(g.Ad)), false)
 		return m, rosterYayinCmd(m.client, g, m.kendiUye())
 
 	case mGrupKapat:
@@ -1121,7 +1123,7 @@ func (m model) zarfIsle(z kontrolZarfi, verifiedSender string, alindi time.Time)
 			m.ekran = ekGrupListesi
 		}
 		m.gruplar = gruplariListele(m.dataDir)
-		m.notice = "\"" + safe(g.Ad) + "\" grubu kurucusu tarafından kapatıldı."
+		m.notice = dil.F("\"%s\" grubu kurucusu tarafından kapatıldı.", safe(g.Ad))
 		m.isErr = true
 		return m, nil
 	}
@@ -1149,7 +1151,7 @@ func diffMetni(satirlar []DiffSatiri) string {
 		sb.WriteByte('\n')
 	}
 	if len(satirlar) == 0 {
-		sb.WriteString(stMuted.Render("İki taraf da boş: gösterilecek fark yok.") + "\n")
+		sb.WriteString(stMuted.Render(dil.T("İki taraf da boş: gösterilecek fark yok.")) + "\n")
 	}
 	return sb.String()
 }

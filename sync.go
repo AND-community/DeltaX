@@ -30,6 +30,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/protokol"
 )
 
@@ -290,7 +292,7 @@ func paketOlustur(dataDir, projeID, dal, kokCommit string, bilinenNesneler map[s
 			// bozulmuşsa bunu push'u başarısız kılan bir hata olarak
 			// bildirmek, "başarılı" görünen ama tamamlanamayan bir
 			// senkronizasyondan çok daha güvenlidir.
-			return nil, 0, fmt.Errorf("nesne %s okunamadı — yerel depo bozuk olabilir: %w", h, err)
+			return nil, 0, fmt.Errorf(dil.T("nesne %s okunamadı — yerel depo bozuk olabilir: %w"), h, err)
 		}
 		switch tip {
 		case 'C':
@@ -327,7 +329,7 @@ func paketOlustur(dataDir, projeID, dal, kokCommit string, bilinenNesneler map[s
 	for _, h := range sirali {
 		path, err := nesneYolu(dataDir, projeID, h)
 		if err != nil {
-			return nil, 0, fmt.Errorf("nesne %s için yol hesaplanamadı: %w", h, err)
+			return nil, 0, fmt.Errorf(dil.T("nesne %s için yol hesaplanamadı: %w"), h, err)
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -336,7 +338,7 @@ func paketOlustur(dataDir, projeID, dal, kokCommit string, bilinenNesneler map[s
 			// sonradan oluşan bir bozulma anlamına gelir. Eskiden bu da
 			// sessizce atlanıp sirali/nesneSayisi'nde sayılmaya devam
 			// ederdi, oysa nesne pakete hiç yazılmamış olurdu.
-			return nil, 0, fmt.Errorf("nesne %s okunamadı: %w", h, err)
+			return nil, 0, fmt.Errorf(dil.T("nesne %s okunamadı: %w"), h, err)
 		}
 		if err := tw.WriteHeader(&tar.Header{Name: h, Size: int64(len(data)), Mode: 0o600, ModTime: time.Now()}); err != nil {
 			return nil, 0, err
@@ -443,7 +445,7 @@ func paketAyristir(dosyaAdi string) (grupID, projeID string, ok bool) {
 func pushYap(c istemci, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBaslangic string) (int, error) {
 	head := p.Dallar[p.AktifDal]
 	if head == "" {
-		return 0, fmt.Errorf("önce en az bir kayıt (commit) oluşturmalısın")
+		return 0, errors.New(dil.T("önce en az bir kayıt (commit) oluşturmalısın"))
 	}
 	bilinen := map[string]bool{}
 	if bilinenBaslangic != "" {
@@ -455,7 +457,7 @@ func pushYap(c istemci, dataDir string, g Grup, p Proje, hedefUye Uye, bilinenBa
 		return 0, err
 	}
 	if nesneSayisi == 0 {
-		return 0, fmt.Errorf("%s zaten güncel", hedefUye.Ad)
+		return 0, fmt.Errorf(dil.T("%s zaten güncel"), hedefUye.Ad)
 	}
 	sifreli, err := sirliSifrele(g.Sir, paket)
 	if err != nil {
@@ -533,14 +535,14 @@ func paketGonderenGuvenilirMi(dataDir, dosyaAdi, gonderenPeerID string) bool {
 func pushPaketiIsle(dataDir, dosyaYolu, gonderenPeerID string) (grupID, projeID string, manifest paketManifest, nesneSayisi int, err error) {
 	grupID, projeID, ok := paketAyristir(dosyaYolu)
 	if !ok {
-		return "", "", manifest, 0, fmt.Errorf("proje ağı paketi değil")
+		return "", "", manifest, 0, errors.New(dil.T("proje ağı paketi değil"))
 	}
 	g, err := grupOku(dataDir, grupID)
 	if err != nil {
-		return grupID, projeID, manifest, 0, fmt.Errorf("bilinmeyen grup: %w", err)
+		return grupID, projeID, manifest, 0, fmt.Errorf(dil.T("bilinmeyen grup: %w"), err)
 	}
 	if !g.uyeMi(gonderenPeerID) {
-		return grupID, projeID, manifest, 0, fmt.Errorf("gönderen %s grubunun üyesi değil", g.Ad)
+		return grupID, projeID, manifest, 0, fmt.Errorf(dil.T("gönderen %s grubunun üyesi değil"), g.Ad)
 	}
 	sifreli, err := os.ReadFile(dosyaYolu)
 	if err != nil {
@@ -548,7 +550,7 @@ func pushPaketiIsle(dataDir, dosyaYolu, gonderenPeerID string) (grupID, projeID 
 	}
 	acik, err := sirliCoz(g.Sir, sifreli)
 	if err != nil {
-		return grupID, projeID, manifest, 0, fmt.Errorf("paket çözülemedi (yanlış grup anahtarı olabilir): %w", err)
+		return grupID, projeID, manifest, 0, fmt.Errorf(dil.T("paket çözülemedi (yanlış grup anahtarı olabilir): %w"), err)
 	}
 	if _, err := os.Stat(projeKokDizini(dataDir, projeID)); os.IsNotExist(err) {
 		// Bu düğümde proje hiç yoksa iskeletini oluştur — çalışma dizini

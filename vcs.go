@@ -16,6 +16,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -24,6 +25,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/lucian95511/and/dil"
 )
 
 const maxDosyaBoyutu = 200 * 1024 * 1024 // 200 MB — daha büyük dosyalar anlık görüntüye dahil edilmez
@@ -59,7 +62,7 @@ func nesneYaz(dataDir, projeID string, tip byte, payload []byte) (string, error)
 
 func nesneYolu(dataDir, projeID, hash string) (string, error) {
 	if !reHex64.MatchString(hash) {
-		return "", fmt.Errorf("geçersiz nesne hash'i")
+		return "", errors.New(dil.T("geçersiz nesne hash'i"))
 	}
 	return filepath.Join(projeNesneDizini(dataDir, projeID), hash[:2], hash[2:]), nil
 }
@@ -74,7 +77,7 @@ func nesneOku(dataDir, projeID, hash string) (tip byte, payload []byte, err erro
 		return 0, nil, err
 	}
 	if len(full) < 1 {
-		return 0, nil, fmt.Errorf("bozuk nesne: %s", hash)
+		return 0, nil, fmt.Errorf(dil.T("bozuk nesne: %s"), hash)
 	}
 	return full[0], full[1:], nil
 }
@@ -118,7 +121,7 @@ func agacOku(dataDir, projeID, hash string) (Agac, error) {
 		return a, err
 	}
 	if tip != 'T' {
-		return a, fmt.Errorf("beklenmeyen nesne tipi: ağaç bekleniyordu")
+		return a, errors.New(dil.T("beklenmeyen nesne tipi: ağaç bekleniyordu"))
 	}
 	err = json.Unmarshal(payload, &a)
 	return a, err
@@ -143,7 +146,7 @@ func commitOku(dataDir, projeID, hash string) (Commit, error) {
 		return c, err
 	}
 	if tip != 'C' {
-		return c, fmt.Errorf("beklenmeyen nesne tipi: commit bekleniyordu")
+		return c, errors.New(dil.T("beklenmeyen nesne tipi: commit bekleniyordu"))
 	}
 	err = json.Unmarshal(payload, &c)
 	return c, err
@@ -321,7 +324,7 @@ func dosyayiCalismayaYaz(dataDir, projeID, calismaDir string, g AgacGirdi) error
 	// çalışma dizini dışına yazardı (zip-slip). editor.go'nun kullanıcı
 	// girdisi için zaten uyguladığı aynı kontrol burada da uygulanıyor.
 	if !gecerliGoreliYol(g.Yol) {
-		return fmt.Errorf("güvensiz dosya yolu reddedildi: %q", g.Yol)
+		return fmt.Errorf(dil.T("güvensiz dosya yolu reddedildi: %q"), g.Yol)
 	}
 	_, data, err := nesneOku(dataDir, projeID, g.Hash)
 	if err != nil {
@@ -619,7 +622,7 @@ func dosyaFarkiHesapla(dataDir, projeID, calismaDir, headTree, yol string) ([]Di
 	var eski []byte
 	if g, ok := headMap[yol]; ok {
 		if g.Boyut > maxDiffBoyutu {
-			return nil, fmt.Errorf("dosya çok büyük — satır bazlı fark atlandı: %s", yol)
+			return nil, fmt.Errorf(dil.T("dosya çok büyük — satır bazlı fark atlandı: %s"), yol)
 		}
 		_, eski, err = nesneOku(dataDir, projeID, g.Hash)
 		if err != nil {
@@ -630,7 +633,7 @@ func dosyaFarkiHesapla(dataDir, projeID, calismaDir, headTree, yol string) ([]Di
 	var yeni []byte
 	if info, err := os.Stat(full); err == nil {
 		if info.Size() > maxDiffBoyutu {
-			return nil, fmt.Errorf("dosya çok büyük — satır bazlı fark atlandı: %s", yol)
+			return nil, fmt.Errorf(dil.T("dosya çok büyük — satır bazlı fark atlandı: %s"), yol)
 		}
 		yeni, err = os.ReadFile(full)
 		if err != nil {
@@ -638,7 +641,7 @@ func dosyaFarkiHesapla(dataDir, projeID, calismaDir, headTree, yol string) ([]Di
 		}
 	}
 	if satirSayisi(eski) > maxDiffSatir || satirSayisi(yeni) > maxDiffSatir {
-		return nil, fmt.Errorf("dosya çok fazla satır içeriyor — satır bazlı fark atlandı: %s", yol)
+		return nil, fmt.Errorf(dil.T("dosya çok fazla satır içeriyor — satır bazlı fark atlandı: %s"), yol)
 	}
 	return satirDiff(eski, yeni), nil
 }

@@ -6,6 +6,7 @@ package main
 
 import (
 	"archive/zip"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lucian95511/and/dil"
 )
 
 // projeDisaAktar, projenin kök dizinini (meta.json, nesneler/, calisma/)
@@ -21,10 +24,10 @@ import (
 func projeDisaAktar(dataDir, projeID, projeAd, hedefKlasor string) (string, error) {
 	kok := projeKokDizini(dataDir, projeID)
 	if _, err := os.Stat(kok); err != nil {
-		return "", fmt.Errorf("proje bulunamadı: %w", err)
+		return "", fmt.Errorf(dil.T("proje bulunamadı: %w"), err)
 	}
 	if strings.TrimSpace(hedefKlasor) == "" {
-		return "", fmt.Errorf("hedef klasör boş olamaz")
+		return "", errors.New(dil.T("hedef klasör boş olamaz"))
 	}
 	if err := os.MkdirAll(hedefKlasor, 0o700); err != nil {
 		return "", err

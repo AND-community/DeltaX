@@ -5,7 +5,6 @@ package main
 // işleyicisi yoksa mesaj açık ekrandaki giriş kutusuna iletilir.
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/internal/ui"
 )
 
@@ -160,7 +160,7 @@ func (m model) dosyalarGeldi(msg filePollResultMsg) (tea.Model, tea.Cmd) {
 		_, projeID, manifest, sayisi, err := pushPaketiIsle(m.dataDir, fm.SavePath, fm.From)
 		_ = os.Remove(fm.SavePath)
 		if err != nil {
-			m = m.bildirGuncelle("Paket işlenemedi: "+describeErr(err), true)
+			m = m.bildirGuncelle(dil.T("Paket işlenemedi: ")+describeErr(err), true)
 			continue
 		}
 		if p, perr := projeOku(m.dataDir, projeID); perr == nil {
@@ -175,7 +175,7 @@ func (m model) dosyalarGeldi(msg filePollResultMsg) (tea.Model, tea.Cmd) {
 				*m.aktifProje = p
 			}
 		}
-		m = m.bildirGuncelle(fmt.Sprintf("%d yeni nesne alındı (%s) — Uzak Dallar'dan birleştirebilirsin.", sayisi, safe(manifest.Dal)), false)
+		m = m.bildirGuncelle(dil.F("%d yeni nesne alındı (%s) — Uzak Dallar'dan birleştirebilirsin.", sayisi, safe(manifest.Dal)), false)
 		if m.ekran == ekProjePaneli && m.aktifProje != nil && m.aktifProje.ID == projeID {
 			// Üst karttaki "yeni kayıt" sayıları güncellensin.
 			return m, tea.Batch(filePollCmd(m.client), projeOzetiCmd(m.dataDir, *m.aktifProje, m.calismaDir()))
@@ -215,19 +215,19 @@ func (m model) basitSonucGeldi(msg basitSonuc) (tea.Model, tea.Cmd) {
 	switch msg.islem {
 	case "davet":
 		if msg.err != nil {
-			m.notice, m.isErr = "Davet gönderilemedi: "+describeErr(msg.err), true
+			m.notice, m.isErr = dil.T("Davet gönderilemedi: ")+describeErr(msg.err), true
 		} else {
-			m.notice, m.isErr = "Davet gönderildi. Kişi çevrimdışıysa AND daveti bekletir, bağlandığında iletir.", false
+			m.notice, m.isErr = dil.T("Davet gönderildi. Kişi çevrimdışıysa AND daveti bekletir, bağlandığında iletir."), false
 		}
 	case "pull_iste":
 		if msg.err != nil {
-			m.notice, m.isErr = "Çek isteği gönderilemedi: "+describeErr(msg.err), true
+			m.notice, m.isErr = dil.T("Çek isteği gönderilemedi: ")+describeErr(msg.err), true
 		} else {
-			m.notice, m.isErr = "Çek isteği gönderildi — karşı taraf çevrimiçiyse kısa süre içinde değişiklikler gelecek.", false
+			m.notice, m.isErr = dil.T("Çek isteği gönderildi — karşı taraf çevrimiçiyse kısa süre içinde değişiklikler gelecek."), false
 		}
 	case "roster":
 		if msg.err != nil {
-			m.notice, m.isErr = "Üye listesi güncellemesi bazı üyelere ulaşmadı.", true
+			m.notice, m.isErr = dil.T("Üye listesi güncellemesi bazı üyelere ulaşmadı."), true
 		}
 	}
 	return m, nil
@@ -236,10 +236,10 @@ func (m model) basitSonucGeldi(msg basitSonuc) (tea.Model, tea.Cmd) {
 func (m model) grupOlusturuldu(msg grupOlusturSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "Grup oluşturulamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Grup oluşturulamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
-	m.notice, m.isErr = "\""+msg.grup.Ad+"\" grubu oluşturuldu.", false
+	m.notice, m.isErr = dil.F("\"%s\" grubu oluşturuldu.", msg.grup.Ad), false
 	m.gruplar = gruplariListele(m.dataDir)
 	m.ekran = ekGrupListesi
 	return m, nil
@@ -248,14 +248,14 @@ func (m model) grupOlusturuldu(msg grupOlusturSonucu) (tea.Model, tea.Cmd) {
 func (m model) davetKabulEdildi(msg kabulSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "İşlem hatası: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("İşlem hatası: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	if msg.grup.ID != "" {
-		m.notice, m.isErr = "\""+msg.grup.Ad+"\" grubuna katıldın.", false
+		m.notice, m.isErr = dil.F("\"%s\" grubuna katıldın.", msg.grup.Ad), false
 		m.gruplar = gruplariListele(m.dataDir)
 	} else {
-		m.notice, m.isErr = "Davet reddedildi.", false
+		m.notice, m.isErr = dil.T("Davet reddedildi."), false
 	}
 	return m, nil
 }
@@ -263,10 +263,10 @@ func (m model) davetKabulEdildi(msg kabulSonucu) (tea.Model, tea.Cmd) {
 func (m model) projeOlusturuldu(msg projeOlusturSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "Proje oluşturulamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Proje oluşturulamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
-	m.notice, m.isErr = "\""+msg.proje.Ad+"\" projesi oluşturuldu.", false
+	m.notice, m.isErr = dil.F("\"%s\" projesi oluşturuldu.", msg.proje.Ad), false
 	m.projeler = projeleriListele(m.dataDir, m.aktifGrup.ID)
 	m.ekran = ekGrupPaneli
 	return m, nil
@@ -278,7 +278,7 @@ func (m model) durumGeldi(msg durumSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.notice, m.isErr = "Durum hesaplanamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Durum hesaplanamadı: ")+describeErr(msg.err), true
 		m.ekran = ekProjePaneli
 		return m, nil
 	}
@@ -321,7 +321,7 @@ func (m model) kayitGeldi(msg kayitSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.notice, m.isErr = "Kayıt okunamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Kayıt okunamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	m.kayit = msg.detay
@@ -337,9 +337,9 @@ func (m model) geriAlindi(msg geriAlSonucu) (tea.Model, tea.Cmd) {
 	}
 	m.ekran = ekDurum
 	if msg.err != nil {
-		m.notice, m.isErr = "Geri alınamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Geri alınamadı: ")+describeErr(msg.err), true
 	} else {
-		m.notice, m.isErr = msg.yol+" son kayıttaki hâline döndü.", false
+		m.notice, m.isErr = dil.F("%s son kayıttaki hâline döndü.", msg.yol), false
 	}
 	p := m.aktifProje
 	return m, durumCmd(m.dataDir, p.ID, m.calismaDir(), p.Dallar[p.AktifDal])
@@ -351,15 +351,15 @@ func (m model) commitBitti(msg commitSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.notice, m.isErr = "Kayıt oluşturulamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Kayıt oluşturulamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	m.aktifProje.Dallar[m.aktifProje.AktifDal] = msg.hash
 	_ = projeKaydet(m.dataDir, *m.aktifProje)
 	if msg.atlanan > 0 {
-		m.notice = fmt.Sprintf("Kayıt oluşturuldu: %s (%d büyük dosya atlandı)", kisaHash(msg.hash), msg.atlanan)
+		m.notice = dil.F("Kayıt oluşturuldu: %s (%d büyük dosya atlandı)", kisaHash(msg.hash), msg.atlanan)
 	} else {
-		m.notice = "Kayıt oluşturuldu: " + kisaHash(msg.hash)
+		m.notice = dil.T("Kayıt oluşturuldu: ") + kisaHash(msg.hash)
 	}
 	m.isErr = false
 	m.commitMsgIn.SetValue("")
@@ -384,16 +384,16 @@ func (m model) dalDegisti(msg dalDegistirSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.notice, m.isErr = "Dal değiştirilemedi: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Dal değiştirilemedi: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	if msg.kirli {
-		m.notice, m.isErr = "Önce mevcut değişiklikleri kaydet (kaydedilmemiş dosyalar var).", true
+		m.notice, m.isErr = dil.T("Önce mevcut değişiklikleri kaydet (kaydedilmemiş dosyalar var)."), true
 		return m, nil
 	}
 	m.aktifProje.AktifDal = msg.dal
 	_ = projeKaydet(m.dataDir, *m.aktifProje)
-	m.notice, m.isErr = "Dal değiştirildi: "+msg.dal, false
+	m.notice, m.isErr = dil.T("Dal değiştirildi: ")+msg.dal, false
 	m.ekran = ekProjePaneli
 	return m, nil
 }
@@ -415,9 +415,9 @@ func (m model) diffGeldi(msg diffSonucu) (tea.Model, tea.Cmd) {
 func (m model) pushBitti(msg pushSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = safe(msg.hedefAd)+": gönderilemedi — "+describeErr(msg.err), true
+		m.notice, m.isErr = safe(msg.hedefAd)+dil.T(": gönderilemedi — ")+describeErr(msg.err), true
 	} else {
-		m.notice, m.isErr = fmt.Sprintf("%s kullanıcısına %d nesne gönderildi.", safe(msg.hedefAd), msg.nesneSayisi), false
+		m.notice, m.isErr = dil.F("%s kullanıcısına %d nesne gönderildi.", safe(msg.hedefAd), msg.nesneSayisi), false
 		if m.aktifProje != nil {
 			p, err := projeOku(m.dataDir, m.aktifProje.ID)
 			if err == nil {
@@ -434,19 +434,19 @@ func (m model) birlestirmeBitti(msg birlestirSonucu) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
-		m.notice, m.isErr = "Birleştirme hatası: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Birleştirme hatası: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	if len(msg.catismalar) > 0 {
 		m.sonCatismalar = msg.catismalar
-		m.notice = fmt.Sprintf("%d dosyada çakışma var — dosyaları elle düzenleyip Kaydet'e bas.", len(msg.catismalar))
+		m.notice = dil.F("%d dosyada çakışma var — dosyaları elle düzenleyip Kaydet'e bas.", len(msg.catismalar))
 		m.isErr = true
 		m.ekran = ekProjePaneli
 		return m, nil
 	}
 	m.aktifProje.Dallar[m.aktifProje.AktifDal] = msg.yeniCommit
 	_ = projeKaydet(m.dataDir, *m.aktifProje)
-	m.notice, m.isErr = "Birleştirme tamamlandı: "+kisaHash(msg.yeniCommit), false
+	m.notice, m.isErr = dil.T("Birleştirme tamamlandı: ")+kisaHash(msg.yeniCommit), false
 	m.ekran = ekProjePaneli
 	return m, nil
 }
@@ -454,7 +454,7 @@ func (m model) birlestirmeBitti(msg birlestirSonucu) (tea.Model, tea.Cmd) {
 func (m model) gruptanCikildi(msg grupCikKapatSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "İşlem başarısız: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("İşlem başarısız: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	m.aktifGrup = nil
@@ -465,12 +465,12 @@ func (m model) gruptanCikildi(msg grupCikKapatSonucu) (tea.Model, tea.Cmd) {
 	}
 	m.ekran = ekGrupListesi
 	if msg.kapatildi {
-		m.notice = "Grup kapatıldı."
+		m.notice = dil.T("Grup kapatıldı.")
 	} else {
-		m.notice = "Gruptan çıkıldı."
+		m.notice = dil.T("Gruptan çıkıldı.")
 	}
 	if msg.agHatasi != nil {
-		m.notice += " (uyarı: " + describeErr(msg.agHatasi) + ")"
+		m.notice += dil.T(" (uyarı: ") + describeErr(msg.agHatasi) + ")"
 	}
 	m.isErr = false
 	return m, nil
@@ -479,7 +479,7 @@ func (m model) gruptanCikildi(msg grupCikKapatSonucu) (tea.Model, tea.Cmd) {
 func (m model) dosyaListesiGeldi(msg dosyaListesiSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "Dosya listesi alınamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Dosya listesi alınamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	m.dosyaListesi = msg.liste
@@ -494,7 +494,7 @@ func (m model) dosyaListesiGeldi(msg dosyaListesiSonucu) (tea.Model, tea.Cmd) {
 func (m model) dosyaAcildi(msg dosyaAcSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "Dosya açılamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Dosya açılamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
 	m.dosyaDuzenleYol = msg.rel
@@ -506,29 +506,29 @@ func (m model) dosyaAcildi(msg dosyaAcSonucu) (tea.Model, tea.Cmd) {
 
 func (m model) dosyaKaydedildi(msg dosyaKaydetSonucu) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.notice, m.isErr = "Kaydedilemedi: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Kaydedilemedi: ")+describeErr(msg.err), true
 		return m, nil
 	}
-	m.notice, m.isErr = "Kaydedildi: "+m.dosyaDuzenleYol, false
+	m.notice, m.isErr = dil.T("Kaydedildi: ")+m.dosyaDuzenleYol, false
 	return m, nil
 }
 
 func (m model) dosyaSilindi(msg dosyaSilSonucu) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.notice, m.isErr = "Silinemedi: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Silinemedi: ")+describeErr(msg.err), true
 		return m, nil
 	}
-	m.notice, m.isErr = "Silindi: "+msg.rel, false
+	m.notice, m.isErr = dil.T("Silindi: ")+msg.rel, false
 	return m, dosyaListesiCmd(m.calismaDir())
 }
 
 func (m model) disaAktarildi(msg disaAktarSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
-		m.notice, m.isErr = "Dışa aktarılamadı: "+describeErr(msg.err), true
+		m.notice, m.isErr = dil.T("Dışa aktarılamadı: ")+describeErr(msg.err), true
 		return m, nil
 	}
-	m.notice, m.isErr = "Dışa aktarıldı: "+msg.yol, false
+	m.notice, m.isErr = dil.T("Dışa aktarıldı: ")+msg.yol, false
 	m.ekran = ekProjePaneli
 	return m, nil
 }

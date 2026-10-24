@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/lucian95511/and/dil"
 )
 
 // DosyaDegisikligi, bir kaydın (ya da çalışma klasörünün) değiştirdiği tek
@@ -54,7 +56,7 @@ func kayitAgaclari(dataDir, projeID, hash string) (c Commit, ebeveyn, kendi map[
 	if len(c.Ebeveynler) > 0 {
 		pc, perr := commitOku(dataDir, projeID, c.Ebeveynler[0])
 		if perr != nil {
-			return c, nil, nil, fmt.Errorf("önceki kayıt %s okunamadı: %w", kisaHash(c.Ebeveynler[0]), perr)
+			return c, nil, nil, fmt.Errorf(dil.T("önceki kayıt %s okunamadı: %w"), kisaHash(c.Ebeveynler[0]), perr)
 		}
 		if ebeveyn, err = agacHaritala(dataDir, projeID, pc.Agac); err != nil {
 			return c, nil, nil, err
@@ -83,7 +85,7 @@ func kayitDosyaFarki(dataDir, projeID, hash, yol string) ([]DiffSatiri, error) {
 			return nil, nil
 		}
 		if g.Boyut > maxDiffBoyutu {
-			return nil, fmt.Errorf("dosya çok büyük — satır bazlı fark atlandı: %s", yol)
+			return nil, fmt.Errorf(dil.T("dosya çok büyük — satır bazlı fark atlandı: %s"), yol)
 		}
 		_, data, err := nesneOku(dataDir, projeID, g.Hash)
 		return data, err
@@ -99,7 +101,7 @@ func kayitDosyaFarki(dataDir, projeID, hash, yol string) ([]DiffSatiri, error) {
 		return nil, err
 	}
 	if satirSayisi(eski) > maxDiffSatir || satirSayisi(yeni) > maxDiffSatir {
-		return nil, fmt.Errorf("dosya çok fazla satır içeriyor — satır bazlı fark atlandı: %s", yol)
+		return nil, fmt.Errorf(dil.T("dosya çok fazla satır içeriyor — satır bazlı fark atlandı: %s"), yol)
 	}
 	return satirDiff(eski, yeni), nil
 }
@@ -108,7 +110,7 @@ func kayitDosyaFarki(dataDir, projeID, hash, yol string) ([]DiffSatiri, error) {
 // döndürür; son kayıtta yoksa (yeni eklenmişse) siler.
 func degisikligiGeriAl(dataDir, projeID, calismaDir, headTree, yol string) error {
 	if !gecerliGoreliYol(yol) {
-		return fmt.Errorf("güvensiz dosya yolu reddedildi: %q", yol)
+		return fmt.Errorf(dil.T("güvensiz dosya yolu reddedildi: %q"), yol)
 	}
 	head, err := agacHaritala(dataDir, projeID, headTree)
 	if err != nil {
@@ -188,7 +190,7 @@ func diffKatla(satirlar []DiffSatiri, baglam int) []DiffSatiri {
 		for j < len(satirlar) && !yakin[j] {
 			j++
 		}
-		out = append(out, DiffSatiri{Tip: '@', Metin: fmt.Sprintf("⋯ %d satır aynı", j-i)})
+		out = append(out, DiffSatiri{Tip: '@', Metin: dil.F("⋯ %d satır aynı", j-i)})
 		i = j
 	}
 	return out
@@ -218,15 +220,15 @@ func goreliZaman(t, simdi time.Time) string {
 	d := simdi.Sub(t)
 	switch {
 	case d < time.Minute:
-		return "az önce"
+		return dil.T("az önce")
 	case d < time.Hour:
-		return fmt.Sprintf("%d dk önce", int(d.Minutes()))
+		return dil.F("%d dk önce", int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d sa önce", int(d.Hours()))
+		return dil.F("%d sa önce", int(d.Hours()))
 	case d < 48*time.Hour:
-		return "dün"
+		return dil.T("dün")
 	case d < 7*24*time.Hour:
-		return fmt.Sprintf("%d gün önce", int(d.Hours()/24))
+		return dil.F("%d gün önce", int(d.Hours()/24))
 	}
 	return t.Local().Format("02.01.2006")
 }

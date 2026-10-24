@@ -16,6 +16,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+
+	"github.com/lucian95511/and/dil"
 )
 
 func sirUret() (string, error) {
@@ -29,7 +31,7 @@ func sirUret() (string, error) {
 func gcmAc(sirHex string) (cipher.AEAD, error) {
 	key, err := hex.DecodeString(sirHex)
 	if err != nil || len(key) != 32 {
-		return nil, errors.New("geçersiz grup anahtarı")
+		return nil, errors.New(dil.T("geçersiz grup anahtarı"))
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -57,7 +59,7 @@ func sirliCoz(sirHex string, sifreliVeri []byte) ([]byte, error) {
 	}
 	ns := gcm.NonceSize()
 	if len(sifreliVeri) < ns {
-		return nil, errors.New("şifreli veri çok kısa")
+		return nil, errors.New(dil.T("şifreli veri çok kısa"))
 	}
 	nonce, ct := sifreliVeri[:ns], sifreliVeri[ns:]
 	return gcm.Open(nil, nonce, ct, nil)

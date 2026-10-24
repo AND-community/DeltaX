@@ -3,13 +3,13 @@ package main
 // keys.go — tüm ekranlar için klavye olayı işleyicileri.
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/internal/pluginapi"
 )
 
@@ -91,16 +91,16 @@ func (m model) keyGeri(msg tea.KeyMsg, hedef ekran) (tea.Model, tea.Cmd) {
 // ─── Ana menü ─────────────────────────────────────────────────────────────────
 
 func (m model) anaMenuSecenekleri() []string {
-	davetler := "Davetler"
+	davetler := dil.T("Davetler")
 	if n := len(m.bekleyenDavetler); n > 0 {
-		davetler = fmt.Sprintf("Davetler (%d)", n)
+		davetler = dil.F("Davetler (%d)", n)
 	}
 	return []string{
-		"Gruplarım",
-		"Yeni Grup Oluştur",
+		dil.T("Gruplarım"),
+		dil.T("Yeni Grup Oluştur"),
 		davetler,
-		"Kimlik Bilgileri",
-		"Çıkış",
+		dil.T("Kimlik Bilgileri"),
+		dil.T("Çıkış"),
 	}
 }
 
@@ -230,7 +230,7 @@ func (m model) keyGrupOlustur(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		ad := strings.TrimSpace(m.grupAdIn.Value())
 		if ad == "" {
-			m.notice, m.isErr = "Grup adı boş olamaz.", true
+			m.notice, m.isErr = dil.T("Grup adı boş olamaz."), true
 			return m, nil
 		}
 		if m.pending {
@@ -275,7 +275,7 @@ func (m model) keyGrupPaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ekran = ekProjeOlustur
 	case "i", "I":
 		if !m.aktifGrup.yetkiliMi(m.identity.PeerID) {
-			m.notice, m.isErr = "Yalnızca kurucu ya da bir yönetici üye davet edebilir.", true
+			m.notice, m.isErr = dil.T("Yalnızca kurucu ya da bir yönetici üye davet edebilir."), true
 			return m, nil
 		}
 		m.uyeDavetIn.SetValue("")
@@ -285,7 +285,7 @@ func (m model) keyGrupPaneli(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ekran = ekUyeDavet
 	case "y", "Y":
 		if !m.aktifGrup.benKurucuMuyum(m.identity.PeerID) {
-			m.notice, m.isErr = "Yalnızca grubun kurucusu yönetici atayabilir.", true
+			m.notice, m.isErr = dil.T("Yalnızca grubun kurucusu yönetici atayabilir."), true
 			return m, nil
 		}
 		m.yoneticiHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
@@ -349,16 +349,16 @@ func (m model) keyUyeDavet(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		peerID := strings.TrimSpace(m.uyeDavetIn.Value())
 		switch {
 		case peerID == "":
-			m.notice, m.isErr = "Peer ID boş olamaz.", true
+			m.notice, m.isErr = dil.T("Peer ID boş olamaz."), true
 			return m, nil
 		case !pluginapi.GecerliPeerID(peerID):
-			m.notice, m.isErr = "Bu bir Peer ID değil (12D3KooW… ile başlar; kişi kendi ID'sini Kimlik ekranından paylaşabilir).", true
+			m.notice, m.isErr = dil.T("Bu bir Peer ID değil (12D3KooW… ile başlar; kişi kendi ID'sini Kimlik ekranından paylaşabilir)."), true
 			return m, nil
 		case peerID == m.identity.PeerID:
-			m.notice, m.isErr = "Kendini davet edemezsin.", true
+			m.notice, m.isErr = dil.T("Kendini davet edemezsin."), true
 			return m, nil
 		case m.aktifGrup.uyeMi(peerID):
-			m.notice, m.isErr = "Bu kişi zaten grubun üyesi.", true
+			m.notice, m.isErr = dil.T("Bu kişi zaten grubun üyesi."), true
 			return m, nil
 		}
 		if m.pending {
@@ -440,7 +440,7 @@ func (m model) keyProjeOlustur(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		ad := strings.TrimSpace(m.projeAdIn.Value())
 		if ad == "" {
-			m.notice, m.isErr = "Proje adı boş olamaz.", true
+			m.notice, m.isErr = dil.T("Proje adı boş olamaz."), true
 			return m, nil
 		}
 		if m.pending {
@@ -530,9 +530,9 @@ func (m model) projeIsleminiCalistir(tus string) (tea.Model, tea.Cmd) {
 		return m, pendingCmd(m, dosyaListesiCmd(m.calismaDir()))
 	case "o":
 		if err := klasoruAc(m.calismaDir()); err != nil {
-			m.notice, m.isErr = "Klasör açılamadı: "+describeErr(err), true
+			m.notice, m.isErr = dil.T("Klasör açılamadı: ")+describeErr(err), true
 		} else {
-			m.notice, m.isErr = "Klasör açıldı: "+m.calismaDir(), false
+			m.notice, m.isErr = dil.T("Klasör açıldı: ")+m.calismaDir(), false
 		}
 	case "e":
 		m.disaAktarIn.Focus()
@@ -574,7 +574,7 @@ func (m model) keyDurum(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "c":
 		if len(liste) == 0 {
-			m.notice, m.isErr = "Kaydedilecek değişiklik yok.", false
+			m.notice, m.isErr = dil.T("Kaydedilecek değişiklik yok."), false
 			return m, nil
 		}
 		return m.commitEkraniniAc()
@@ -650,7 +650,7 @@ func (m model) keyCommitMesaj(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		mesaj := strings.TrimSpace(m.commitMsgIn.Value())
 		if mesaj == "" {
-			m.notice, m.isErr = "Kayıt mesajı boş olamaz.", true
+			m.notice, m.isErr = dil.T("Kayıt mesajı boş olamaz."), true
 			return m, nil
 		}
 		if m.pending {
@@ -795,7 +795,7 @@ func (m model) keyDallar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.dallar[m.dalIdx] == m.aktifProje.AktifDal {
-			m.notice, m.isErr = "Etkin dal silinemez; önce başka bir dala geç.", true
+			m.notice, m.isErr = dil.T("Etkin dal silinemez; önce başka bir dala geç."), true
 			return m, nil
 		}
 		m.onayTip, m.onayGeriEkran = onayDalSil, ekDallar
@@ -823,13 +823,13 @@ func (m model) keyDallar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m model) dalSil(ad string) model {
 	delete(m.aktifProje.Dallar, ad)
 	if err := projeKaydet(m.dataDir, *m.aktifProje); err != nil {
-		m.notice, m.isErr = "Dal silinemedi: "+describeErr(err), true
+		m.notice, m.isErr = dil.T("Dal silinemedi: ")+describeErr(err), true
 		return m
 	}
 	delete(m.dalSon, ad)
 	m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
 	m.dalIdx = max0(min(m.dalIdx, len(m.dallar)-1))
-	m.notice, m.isErr = "Dal silindi: "+ad+" (kayıtları geçmişte durur).", false
+	m.notice, m.isErr = dil.T("Dal silindi: ")+ad+dil.T(" (kayıtları geçmişte durur)."), false
 	return m
 }
 
@@ -847,15 +847,15 @@ func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		ad := strings.TrimSpace(m.yeniDalIn.Value())
 		if ad == "" {
-			m.notice, m.isErr = "Dal adı boş olamaz.", true
+			m.notice, m.isErr = dil.T("Dal adı boş olamaz."), true
 			return m, nil
 		}
 		if strings.ContainsAny(ad, "/\\ \t") {
-			m.notice, m.isErr = "Dal adında boşluk ya da eğik çizgi olamaz.", true
+			m.notice, m.isErr = dil.T("Dal adında boşluk ya da eğik çizgi olamaz."), true
 			return m, nil
 		}
 		if _, varMi := m.aktifProje.Dallar[ad]; varMi {
-			m.notice, m.isErr = "Bu isimde bir dal zaten var.", true
+			m.notice, m.isErr = dil.T("Bu isimde bir dal zaten var."), true
 			return m, nil
 		}
 		kaynak := m.dalKaynak
@@ -865,7 +865,7 @@ func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.aktifProje.Dallar[ad] = kaynak
 		if err := projeKaydet(m.dataDir, *m.aktifProje); err != nil {
 			delete(m.aktifProje.Dallar, ad)
-			m.notice, m.isErr = "Dal oluşturulamadı: "+describeErr(err), true
+			m.notice, m.isErr = dil.T("Dal oluşturulamadı: ")+describeErr(err), true
 			return m, nil
 		}
 		m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
@@ -876,9 +876,9 @@ func (m model) keyYeniDal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if k := gunlukAl(m.dataDir, m.aktifProje.ID, kaynak, 1); len(k) > 0 {
 			m.dalSon[ad] = k[0]
 		}
-		m.notice, m.isErr = "Dal oluşturuldu: "+ad+" (geçmek için enter).", false
+		m.notice, m.isErr = dil.T("Dal oluşturuldu: ")+ad+dil.T(" (geçmek için enter)."), false
 		if m.dalKaynak != "" {
-			m.notice = "Dal oluşturuldu: " + ad + " — " + kisaHash(kaynak) + " kaydından başlıyor (geçmek için enter)."
+			m.notice = dil.F("Dal oluşturuldu: %s — %s kaydından başlıyor (geçmek için enter).", ad, kisaHash(kaynak))
 		}
 		m.dalKaynak = ""
 		m.ekran = ekDallar
@@ -933,11 +933,11 @@ func (m model) keyGonderSecim(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, pushCmd(m.client, m.dataDir, *m.aktifGrup, *m.aktifProje, u, bilinen))
 		}
 		if len(cmds) == 0 {
-			m.notice, m.isErr = "Çevrimiçi üye yok.", true
+			m.notice, m.isErr = dil.T("Çevrimiçi üye yok."), true
 			return m, nil
 		}
 		m.pending = true
-		m.notice, m.isErr = "Çevrimiçi üyelere gönderiliyor…", false
+		m.notice, m.isErr = dil.T("Çevrimiçi üyelere gönderiliyor…"), false
 		return m, tea.Batch(append(cmds, m.spinner.Tick)...)
 	case "enter":
 		if len(m.uyelerHar) == 0 || m.pending {
@@ -973,7 +973,7 @@ func (m model) keyUzakDallar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		yerelHead := m.aktifProje.Dallar[m.aktifProje.AktifDal]
 		if yerelHead == "" {
-			m.notice, m.isErr = "Önce en az bir kayıt oluşturmalısın.", true
+			m.notice, m.isErr = dil.T("Önce en az bir kayıt oluşturmalısın."), true
 			return m, nil
 		}
 		m.onayTip = onayBirlestir
@@ -1010,11 +1010,11 @@ func (m model) keyPullIste(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if len(cmds) == 0 {
-			m.notice, m.isErr = "Çevrimiçi üye yok.", true
+			m.notice, m.isErr = dil.T("Çevrimiçi üye yok."), true
 			return m, nil
 		}
 		m.pending = true
-		m.notice, m.isErr = fmt.Sprintf("%d çevrimiçi üyeden değişiklikleri isteniyor…", len(cmds)), false
+		m.notice, m.isErr = dil.F("%d çevrimiçi üyeden değişiklikleri isteniyor…", len(cmds)), false
 		return m, tea.Batch(append(cmds, m.spinner.Tick)...)
 	case "enter":
 		if len(m.uyelerHar) == 0 {
@@ -1042,13 +1042,13 @@ func (m model) keyDosyaOnay(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		tid := m.pendingConsent.TransferID
 		m.pendingConsent = nil
 		m.ekran = m.onayOnceki
-		m.notice, m.isErr = "Dosya transferi kabul edildi.", false
+		m.notice, m.isErr = dil.T("Dosya transferi kabul edildi."), false
 		return m, tea.Batch(onayCmd(m.client, tid, true), consentPollCmd(m.client))
 	case "n", "N", "esc", "ctrl+c":
 		tid := m.pendingConsent.TransferID
 		m.pendingConsent = nil
 		m.ekran = m.onayOnceki
-		m.notice, m.isErr = "Dosya transferi reddedildi.", false
+		m.notice, m.isErr = dil.T("Dosya transferi reddedildi."), false
 		return m, tea.Batch(onayCmd(m.client, tid, false), consentPollCmd(m.client))
 	}
 	return m, nil
@@ -1121,13 +1121,13 @@ func (m model) keyYoneticiSecim(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		yapiliyor := !m.aktifGrup.yoneticiMi(hedef.PeerID)
 		m.aktifGrup.yoneticiDurumunuDegistir(hedef, yapiliyor)
 		if err := grupKaydet(m.dataDir, *m.aktifGrup); err != nil {
-			m.notice, m.isErr = "Kaydedilemedi: "+describeErr(err), true
+			m.notice, m.isErr = dil.T("Kaydedilemedi: ")+describeErr(err), true
 			return m, nil
 		}
 		if yapiliyor {
-			m.notice = safe(hedef.Ad) + " yönetici yapıldı."
+			m.notice = dil.F("%s yönetici yapıldı.", safe(hedef.Ad))
 		} else {
-			m.notice = safe(hedef.Ad) + " yöneticilikten çıkarıldı."
+			m.notice = dil.F("%s yöneticilikten çıkarıldı.", safe(hedef.Ad))
 		}
 		m.isErr = false
 		return m, rosterYayinCmd(m.client, *m.aktifGrup, m.kendiUye())
@@ -1170,7 +1170,7 @@ func (m model) keyDosyaListesi(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, dosyaSilCmd(m.calismaDir(), secili)
 		}
 		m.dosyaSilOnayi = secili
-		m.notice, m.isErr = "Silmek için tekrar d'ye bas: "+secili, true
+		m.notice, m.isErr = dil.T("Silmek için tekrar d'ye bas: ")+secili, true
 		return m, nil
 	case "enter":
 		if len(m.dosyaListesi) == 0 {
@@ -1193,17 +1193,17 @@ func (m model) keyYeniDosya(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		rel := strings.TrimSpace(m.yeniDosyaIn.Value())
 		if !gecerliGoreliYol(rel) {
-			m.notice, m.isErr = "Geçersiz dosya yolu.", true
+			m.notice, m.isErr = dil.T("Geçersiz dosya yolu."), true
 			return m, nil
 		}
 		for _, d := range m.dosyaListesi {
 			if d == rel {
-				m.notice, m.isErr = "Bu dosya zaten var.", true
+				m.notice, m.isErr = dil.T("Bu dosya zaten var."), true
 				return m, nil
 			}
 		}
 		if err := dosyaIcerigiYaz(m.calismaDir(), rel, ""); err != nil {
-			m.notice, m.isErr = "Oluşturulamadı: "+describeErr(err), true
+			m.notice, m.isErr = dil.T("Oluşturulamadı: ")+describeErr(err), true
 			return m, nil
 		}
 		m.dosyaDuzenleYol = rel
@@ -1248,7 +1248,7 @@ func (m model) keyDisaAktar(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		hedef := strings.TrimSpace(m.disaAktarIn.Value())
 		if hedef == "" {
-			m.notice, m.isErr = "Hedef klasör boş olamaz.", true
+			m.notice, m.isErr = dil.T("Hedef klasör boş olamaz."), true
 			return m, nil
 		}
 		if m.pending {

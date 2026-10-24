@@ -22,6 +22,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/internal/pluginapi"
 	"github.com/lucian95511/and/internal/pluginui"
 	"github.com/lucian95511/and/internal/ui"
@@ -50,15 +51,15 @@ func describeErr(err error) string {
 	lower := strings.ToLower(msg)
 	for _, izVar := range []string{"connect", "dial", "refused", "timeout", "eof", "no such host", "broken pipe"} {
 		if strings.Contains(lower, izVar) {
-			return "AND'a bağlanılamadı — bağlantı kopmuş olabilir."
+			return dil.T("AND'a bağlanılamadı — bağlantı kopmuş olabilir.")
 		}
 	}
 
 	if errors.Is(err, fs.ErrNotExist) {
-		return "Dosya/klasör bulunamadı."
+		return dil.T("Dosya/klasör bulunamadı.")
 	}
 	if errors.Is(err, fs.ErrPermission) {
-		return "İzin reddedildi (dosya başka bir uygulama tarafından kullanılıyor olabilir)."
+		return dil.T("İzin reddedildi (dosya başka bir uygulama tarafından kullanılıyor olabilir).")
 	}
 
 	return msg
@@ -67,7 +68,7 @@ func describeErr(err error) string {
 var manifest = pluginapi.Manifest{
 	Name:        "DeltaX",
 	Label:       "DeltaX",
-	Version:     "1.6.0",
+	Version:     "1.7.0",
 	Description: "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
 	Author:      "AND",
 	Permissions: []string{pluginapi.IzinDM, pluginapi.IzinDosya},
@@ -79,6 +80,8 @@ func main() {
 		fmt.Println(string(data))
 		return
 	}
+	// AND, eklentiyi kendi etkin dilinde açar (AND_DIL).
+	dil.OrtamdanAyarla()
 
 	client, err := pluginapi.NewClientFromEnv()
 	if err != nil {
@@ -88,13 +91,13 @@ func main() {
 
 	identity, err := client.Identity()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "DeltaX: kimlik alınamadı:", err)
+		fmt.Fprintln(os.Stderr, dil.T("DeltaX: kimlik alınamadı:"), err)
 		os.Exit(1)
 	}
 
 	dataDir := pluginapi.DataDir()
 	if dataDir == "" {
-		fmt.Fprintln(os.Stderr, "DeltaX: AND_DATA_DIR tanımlı değil")
+		fmt.Fprintln(os.Stderr, dil.T("DeltaX: AND_DATA_DIR tanımlı değil"))
 		os.Exit(1)
 	}
 
