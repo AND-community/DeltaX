@@ -18,6 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lucian95511/and/internal/dosya"
 	"github.com/lucian95511/and/internal/pluginapi"
 )
 
@@ -231,6 +232,6 @@ func jsonYaz(dataDir, yol string, v any) {
 		return
 	}
 	if data, err := json.Marshal(v); err == nil {
-		_ = os.WriteFile(yol, data, 0o600)
+		_ = dosya.AtomikYaz(yol, data, 0o600)
 	}
 }

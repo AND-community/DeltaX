@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/lucian95511/and/dil"
+	"github.com/lucian95511/and/internal/dosya"
 )
 
 const maxDuzenlenebilirBoyut = 2 * 1024 * 1024 // 2 MB — daha büyüğü TUI içi düzenleyiciyle açılmaz
@@ -82,7 +83,7 @@ func dosyaIcerigiYaz(calismaDir, rel, icerik string) error {
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(full, []byte(icerik), 0o600)
+	return dosya.AtomikYaz(full, []byte(icerik), 0o600)
 }
 
 func dosyaSil(calismaDir, rel string) error {

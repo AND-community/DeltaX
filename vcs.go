@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/lucian95511/and/dil"
+	"github.com/lucian95511/and/internal/dosya"
 )
 
 const maxDosyaBoyutu = 200 * 1024 * 1024 // 200 MB — daha büyük dosyalar anlık görüntüye dahil edilmez
@@ -54,7 +55,7 @@ func nesneYaz(dataDir, projeID string, tip byte, payload []byte) (string, error)
 	if _, err := os.Stat(path); err == nil {
 		return hash, nil // içerik zaten var — tekilleştir
 	}
-	if err := os.WriteFile(path, full, 0o600); err != nil {
+	if err := dosya.AtomikYaz(path, full, 0o600); err != nil {
 		return "", err
 	}
 	return hash, nil
@@ -334,7 +335,7 @@ func dosyayiCalismayaYaz(dataDir, projeID, calismaDir string, g AgacGirdi) error
 	if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(full, data, 0o600)
+	return dosya.AtomikYaz(full, data, 0o600)
 }
 
 // ─── Commit geçmişi ─────────────────────────────────────────────────────────
@@ -598,7 +599,7 @@ func birlestirmeUygula(dataDir, projeID, calismaDir, temelTree, yerelTree, uzakT
 			if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
 				return catismalar, err
 			}
-			if err := os.WriteFile(full, []byte(icerik), 0o600); err != nil {
+			if err := dosya.AtomikYaz(full, []byte(icerik), 0o600); err != nil {
 				return catismalar, err
 			}
 			continue

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lucian95511/and/dil"
+	"github.com/lucian95511/and/internal/dosya"
 )
 
 const pluginDirName = "DeltaX"
@@ -55,7 +56,7 @@ func davetleriKaydet(dataDir string, davetler []bekleyenDavet) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(davetlerYolu(dataDir), data, 0o600)
+	return dosya.AtomikYaz(davetlerYolu(dataDir), data, 0o600)
 }
 
 // davetleriYukle, kalıcı davet listesini okur — dosya yoksa ya da
@@ -190,7 +191,7 @@ func grupKaydet(dataDir string, g Grup) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(grupYolu(dataDir, g.ID), data, 0o600)
+	return dosya.AtomikYaz(grupYolu(dataDir, g.ID), data, 0o600)
 }
 
 func grupOku(dataDir, id string) (Grup, error) {
@@ -300,7 +301,7 @@ func projeKaydet(dataDir string, p Proje) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(projeMetaYolu(dataDir, p.ID), data, 0o600)
+	return dosya.AtomikYaz(projeMetaYolu(dataDir, p.ID), data, 0o600)
 }
 
 func projeOku(dataDir, id string) (Proje, error) {
@@ -346,7 +347,7 @@ func birlesmeBekleniyorMu(dataDir, projeID string) (string, bool) {
 }
 
 func birlesmeIsaretle(dataDir, projeID, ebeveynHash string) error {
-	return os.WriteFile(projeBirlesmeYolu(dataDir, projeID), []byte(ebeveynHash), 0o600)
+	return dosya.AtomikYaz(projeBirlesmeYolu(dataDir, projeID), []byte(ebeveynHash), 0o600)
 }
 
 func birlesmeTemizle(dataDir, projeID string) {

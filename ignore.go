@@ -17,6 +17,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/lucian95511/and/internal/dosya"
 )
 
 const projeAgIgnoreDosyasi = ".projeagignore"
@@ -38,8 +40,13 @@ func yokSayDesenleriOku(calismaDir string) []string {
 }
 
 // yokSayilsinMi, "/"-ayrılmış göreli bir yolun (ör. "src/node_modules/a.js")
-// verilen desenlerden biriyle eşleşip eşleşmediğini kontrol eder.
+// verilen desenlerden biriyle eşleşip eşleşmediğini kontrol eder. AND'ın atomik
+// yazmalarının geçici dosyaları (dosya.GeciciEk) desenden bağımsız olarak hep
+// yok sayılır: yazma sürerken ya da yarıda kaldıysa değişiklik sayılmazlar.
 func yokSayilsinMi(desenler []string, rel string) bool {
+	if strings.HasSuffix(rel, dosya.GeciciEk) {
+		return true
+	}
 	if len(desenler) == 0 {
 		return false
 	}

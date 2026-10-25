@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lucian95511/and/internal/dosya"
+)
 
 func TestYokSayilsinMi(t *testing.T) {
 	desenler := []string{"node_modules", "*.log", "build/", "src/gizli.txt", "# yorum", ""}
@@ -41,5 +45,16 @@ func TestProjeAgIgnoreCalismaSnapshotindanCikartir(t *testing.T) {
 	}
 	if _, ok := snap[projeAgIgnoreDosyasi]; !ok {
 		t.Fatal(".projeagignore dosyasının kendisi izlenmeliydi")
+	}
+}
+
+// TestYokSay_AtomikYazmaGecicileri: atomik yazmanın geçici dosyaları
+// (dosya.GeciciEk) desen olmasa da değişiklik sayılmaz.
+func TestYokSay_AtomikYazmaGecicileri(t *testing.T) {
+	if !yokSayilsinMi(nil, "src/main.go.123456"+dosya.GeciciEk) {
+		t.Error("geçici dosya yok sayılmalı")
+	}
+	if yokSayilsinMi(nil, "src/main.go") {
+		t.Error("sıradan dosya yok sayılmamalı")
 	}
 }
