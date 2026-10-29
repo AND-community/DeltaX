@@ -18,14 +18,17 @@ Eklenti ayrıca açılışta `GET /api/v1/theme` ile AND'ın o an aktif teması 
 
 ## Kurulum
 
+DeltaX ayrı bir depodur; [AND](https://github.com/AND-community/AND) deposunun `Eklentiler/` klasörüne klonlanıp AND'ın kök dizininden derlenir:
+
 ```bash
-go build -o and-plugin-DeltaX ./Eklentiler/DeltaX
+git clone https://github.com/AND-community/DeltaX.git Eklentiler/DeltaX
+go build -o Eklentiler/DeltaX/and-plugin-DeltaX ./Eklentiler/DeltaX
 
 # Windows
-go build -o and-plugin-DeltaX.exe ./Eklentiler/DeltaX
+go build -o Eklentiler/DeltaX/and-plugin-DeltaX.exe ./Eklentiler/DeltaX
 ```
 
-AND, `Eklentiler/DeltaX/plugin.json` + yukarıdaki binary'yi otomatik keşfeder.
+AND, kendi binary'sinin yanındaki `Eklentiler/DeltaX/plugin.json` + yukarıdaki binary'yi otomatik keşfeder.
 
 ---
 
