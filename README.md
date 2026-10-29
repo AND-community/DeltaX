@@ -1,24 +1,32 @@
 # and-plugin-DeltaX — DeltaX
 
-Özel gruplar kur, kendi sürüm kontrol sistemiyle birlikte proje geliştir. Kod ve proje geçmişi yalnızca grubu oluşturan üyeler arasında, merkezi forum/sohbet ağının tamamen dışında, uçtan uca şifreli olarak dolaşır — grubun **kendi özel ağı**.
+**English** · [Türkçe](README.tr.md)
+
+Set up private groups for [AND](https://github.com/AND-community/AND) and develop projects with their
+own version control system. Code and project history travel only between the members who make up the
+group, completely outside the central forum/chat network, end-to-end encrypted — the group's **own
+private network**.
 
 ---
 
-## Genel Bakış
+## Overview
 
-`and-plugin-DeltaX`, üç katmandan oluşur:
+`and-plugin-DeltaX` has three layers:
 
-1. **Gruplar** — kurucusu tarafından davet edilen üyelerden oluşan, rastgele üretilmiş bir AES-256 sırrını (`Sir`) paylaşan özel topluluklar.
-2. **Projeler** — her grubun içinde, içerik-adresli (blob/ağaç/kayıt tabanlı) bir sürüm kontrol deposu (dal, kayıt/commit, günlük, fark/diff, üç yönlü birleştirme dahil).
-3. **Senkronizasyon** — AND'ın DM (`/and/dm/1.0.0`) ve dosya aktarım (`/and/file/2.0.0`) protokolleri üzerinden, yalnızca nokta-noktaya (peer-to-peer), grup sırrıyla şifrelenmiş paketlerle. Hiçbir veri forum'a, GossipSub sohbet kanallarına ya da başka bir merkezi bileşene değmez.
+1. **Groups** — private communities of members invited by the founder, sharing a randomly generated AES-256 secret (`Sir`).
+2. **Projects** — inside every group, a content-addressed (blob/tree/commit based) version control repository (with branches, commits, log, diff and three-way merge).
+3. **Synchronisation** — over AND's DM (`/and/dm/1.0.0`) and file transfer (`/and/file/2.0.0`) protocols, strictly peer-to-peer, with packets encrypted with the group secret. No data ever touches the forum, the GossipSub chat channels or any other central component.
 
-Eklenti ayrıca açılışta `GET /api/v1/theme` ile AND'ın o an aktif teması (ör. **pembis** eklentisiyle seçilmiş "Pembiş" teması) hangisiyse onu okur ve kendi renklerini buna göre ayarlar — böylece ana uygulama ile aynı renk şemasında açılır.
+At startup the plugin also reads AND's active theme with `GET /api/v1/theme` (e.g. the "Pembiş"
+theme selected with the **pembis** plugin) and sets its own colours to match — so it opens in the
+same colour scheme as the main application.
 
 ---
 
-## Kurulum
+## Installation
 
-DeltaX ayrı bir depodur; [AND](https://github.com/AND-community/AND) deposunun `Eklentiler/` klasörüne klonlanıp AND'ın kök dizininden derlenir:
+DeltaX lives in its own repository; it is cloned into the `Eklentiler/` folder of the
+[AND](https://github.com/AND-community/AND) repository and built from AND's root directory:
 
 ```bash
 git clone https://github.com/AND-community/DeltaX.git Eklentiler/DeltaX
@@ -28,160 +36,184 @@ go build -o Eklentiler/DeltaX/and-plugin-DeltaX ./Eklentiler/DeltaX
 go build -o Eklentiler/DeltaX/and-plugin-DeltaX.exe ./Eklentiler/DeltaX
 ```
 
-AND, kendi binary'sinin yanındaki `Eklentiler/DeltaX/plugin.json` + yukarıdaki binary'yi otomatik keşfeder.
+AND discovers `Eklentiler/DeltaX/plugin.json` next to its own binary together with the binary above.
 
 ---
 
-## Kullanım
+## Usage
 
-Ana menüden **DeltaX**'ı seç.
+Choose **DeltaX** in AND's main menu. The plugin opens in AND's interface language (Turkish,
+English, German, Spanish, French or Russian).
 
-### Görünüm
+### Appearance
 
-DeltaX, AND'ın kendisiyle aynı görsel dili kullanır: tam ekran çerçeve, her ekranın üstünde
-nerede olduğunu gösteren bir yol (`DeltaX › Grup › Proje › Günlük`), sağda etkin dal (`⎇ ana`,
-kaydedilmemiş değişiklik varsa `●`) ya da çevrimiçi üye sayısı, seçim çubuklu listeler ve altta
-o ekranın kısayolları. Uzun listeler ekrana sığacak kadar gösterilir ("↑ 3 daha"). Renkler AND'da
-seçili temadan gelir.
+DeltaX uses the same visual language as AND itself: a full-screen frame, a breadcrumb at the top of
+every screen showing where you are (`DeltaX › Group › Project › Log`), on the right the active branch
+(`⎇ ana` — "ana" is the default branch name — with `●` if there are uncommitted changes) or the number
+of members online, lists with a selection bar, and the screen's shortcuts at the bottom. Long lists
+show as much as fits on the screen ("↑ 3 more"). The colours come from the theme selected in AND.
 
-### Ana menü
+### Main menu
 
-| Tuş | İşlev |
-|-----|-------|
-| `↑/↓`, `j/k` | Gez |
-| `enter` | Seç |
-| `q`/`esc` | Çık |
+| Key | Action |
+|-----|--------|
+| `↑/↓`, `j/k` | Move |
+| `enter` | Select |
+| `q`/`esc` | Quit |
 
-Seçenekler: **Gruplarım**, **Yeni Grup Oluştur**, **Davetler**, **Kimlik Bilgileri**, **Çıkış**.
-Geniş bir terminalde sağda bir özet durur: grup sayısı, çevrimiçi grup arkadaşların, bekleyen
-davetler ve bütün projelerden **son kayıtlar**.
+Options: **My groups**, **Create New Group**, **Invitations**, **Identity Details**, **Quit**.
+On a wide terminal a summary sits on the right: the number of groups, your group mates who are
+online, pending invitations and the **latest commits** across all projects.
 
-### Kısayol yardımı, ilerleme göstergesi ve onay pencereleri
+### Shortcut help, progress indicator and confirmation dialogs
 
-- **`?` — kısayollar**: liste/menü ekranlarının çoğunda (metin girişi olan ekranlar hariç) `?`'ye basınca o ekranın tüm kısayolları büyük, okunaklı bir kutuda açılır; herhangi bir tuşla kapanır.
-- **Gerçek ilerleme göstergesi**: Kaydet/Gönder/Çek/Birleştir/Dışa Aktar gibi arka planda süren işlemler artık statik bir metin yerine dönen bir spinner ile gösterilir — işlemin donmadığını görebilirsin.
-- **Onay pencereleri**: Gruptan çıkma/grubu kapatma gibi, **dal değiştirme** ve **birleştirme** de artık `y`/`n` ile onay isteyen aynı pencereyi kullanır — ikisi de çalışma klasöründeki **izlenmeyen ve `.projeagignore` ile yok sayılan dosyalar dahil her şeyi silip yeniden yazar**; pencere bunu açıkça belirtir. (İstisna: Dosyalar ekranındaki tekil dosya silme hâlâ hızlı "d'ye iki kez bas" deseninde — düşük riskli, sık kullanılan bir işlem için modal pencere gereksiz yavaşlık olurdu.)
-- **Gruplarım'da arama**: `/` ile grup adına/kurucu adına göre canlı filtrele (Günlük ekranındaki arama ile aynı desen), `esc` ile aramadan çık.
+- **`?` — shortcuts**: on most list/menu screens (except screens with text input), pressing `?` opens all of that screen's shortcuts in a large, readable box; any key closes it.
+- **Real progress indicator**: operations that run in the background, such as Commit/Push/Pull/Merge/Export, are shown with a spinning indicator instead of static text — you can see that the operation hasn't frozen.
+- **Confirmation dialogs**: like leaving or closing a group, **switching branches** and **merging** also use the same dialog that asks for confirmation with `y`/`n` — both delete and rewrite **everything in the working folder, including untracked files and files ignored with `.projeagignore`**, and the dialog says so explicitly. (Exception: deleting a single file on the Files screen still uses the quick "press d twice" pattern — a modal dialog would only slow down a low-risk, frequent operation.)
+- **Search in My groups**: `/` filters live by group name or founder name (the same pattern as the search on the Log screen); `esc` leaves the search.
 
-### Grup akışı
+### Group flow
 
-1. **Yeni Grup Oluştur** — grup adını gir; rastgele bir grup anahtarı üretilir.
-2. Grup panelinde `i` ile bir üyeyi Peer ID'siyle davet et (kurucu ya da bir yönetici davet edebilir). Ekranda o an bağlı, grupta olmayan **AND düğümleri** önerilir; `↑/↓` ile seçince Peer ID kutuya yazılır. Kişi çevrimdışıysa AND daveti giden kutusunda bekletir ve bağlandığında iletir (7 güne kadar).
-3. Davet edilen kişi **Davetler** ekranında `a` ile kabul eder (ya da `r` ile reddeder) — yanıt otomatik olarak davet edene bildirilir ve güncel üye listesi gruptaki herkese yeniden yayınlanır, böylece herkesin listesi yakınsar. Davet eden o sırada DeltaX'i kapatmış olsa da yanıt kaybolmaz: bir sonraki açılışta işlenir.
-4. Grup panelinde `n` ile yeni bir proje oluştur.
+1. **Create New Group** — enter the group name; a random group key is generated.
+2. In the group panel, invite a member by Peer ID with `i` (the founder or an admin can invite). The screen suggests the **AND nodes** that are connected right now and not yet in the group; selecting one with `↑/↓` writes its Peer ID into the box. If the person is offline, AND keeps the invitation in its outbox and delivers it when they connect (for up to 7 days).
+3. The invited person accepts with `a` (or rejects with `r`) on the **Invitations** screen — the answer is sent back to the inviter automatically and the current member list is re-broadcast to everyone in the group, so everyone's list converges. Even if the inviter has closed DeltaX at that moment, the answer isn't lost: it is processed on the next start.
+4. Create a new project in the group panel with `n`.
 
-### Yönetici ata (yedek kurucu)
+### Appoint an admin (backup founder)
 
-Kurucu, grup panelinde `y` ile bir üyeyi **yönetici** yapabilir (ya da yöneticilikten çıkarabilir). Yöneticiler kurucuyla aynı şekilde üye davet edebilir ve grubu kapatabilir — kurucunun cihazı/erişimi kaybolursa grup yönetimsiz kalmasın diye. Yalnızca gerçek kurucu yönetici atayabilir/kaldırabilir; bu yetkiyi bir yönetici devredemez.
+In the group panel the founder can make a member an **admin** with `y` (or remove the role). Admins
+can invite members and close the group just like the founder — so the group isn't left without
+anyone in charge if the founder loses their device or access. Only the real founder can appoint or
+remove admins; an admin can't pass this right on.
 
-### Gruptan çıkma / grubu kapatma
+### Leaving / closing a group
 
-Grup panelinde `x` tuşuna bas, ardından `y` ile onayla:
+Press `x` in the group panel, then confirm with `y`:
 
-- **Sıradan bir üyeysen** → *Gruptan Çık*: kurucuya ve tüm yöneticilere bildirilir (biri ulaşılabilirse seni listeden çıkarıp güncel listeyi yeniden yayınlar); grubun yerel kaydın senin tarafında silinir.
-- **Kurucu ya da bir yöneticiysen** → *Grubu Kapat*: tüm üyelere grup dağıtıldı bildirimi gönderilir, alıcı tarafta grup otomatik olarak kendi listelerinden kalkar; grubun yerel kaydı herkeste silinir.
+- **If you are a regular member** → *Leave Group*: the founder and all admins are notified (whoever is reachable removes you from the list and re-broadcasts the current list); the group's local record is deleted on your side.
+- **If you are the founder or an admin** → *Close Group*: all members are notified that the group was dissolved, and on the receiving side the group disappears from their lists automatically; the group's local record is deleted for everyone.
 
-Her iki durumda da **proje dosyaların diskte kalır** — hiçbir yerel çalışma silinmez, yalnızca grubun/roster'ın kendisi kaldırılır. `n` ile vazgeçebilirsin.
+In both cases **your project files stay on disk** — no local work is deleted, only the group/roster
+itself is removed. `n` cancels.
 
-### Proje paneli
+### Project panel
 
-Panelin üstünde projenin durumu görünür: etkin dal, son kayıt (mesajı, yazarı, ne zaman), çalışma
-klasöründeki değişiklikler (`~2 değişen  +1 yeni`), çevrimiçi üyeler ve birleştirilmemiş kayıt
-taşıyan uzak uçlar. Her işlemin bir kısayolu vardır; listede seçmeden doğrudan çalışır.
+The top of the panel shows the project's status: the active branch, the last commit (message,
+author, when), changes in the working folder (`~2 changed  +1 new`), members online and remote tips
+that carry unmerged commits. Every action has a shortcut that works directly, without selecting it
+in the list.
 
-| Tuş | İşlem | Açıklama |
+| Key | Action | Description |
 |-----|-------|----------|
-| `d` | Değişiklikler | Kaydedilmemiş dosyalar; `enter` farkı gösterir, `g` değişikliği geri alır (dosya son kayıttaki hâline döner, yeni dosya silinir; onay ister), `c` kaydeder |
-| `c` | Kaydet (Commit) | Anlık görüntüyü al, mesaj yazıp yeni bir kayıt oluştur; ekranda neyin kaydedileceği görünür |
-| `l` | Günlük | Etkin daldaki kayıtlar; `/` ile mesaj/yazar/hash'e göre ara, `enter` ile **kaydın ayrıntısı** |
-| `b` | Dallar | Dalları son kayıtlarıyla listeler; `enter` dala geç, `n` yeni dal, `d` dalı sil (etkin dal silinemez; kayıtlar geçmişte kalır) |
-| `p` | Gönder (Push) | Yeni kayıtları bir üyeye ya da (`a`) çevrimiçi herkese şifreli paket olarak gönder; her üyenin bildiği son kayıt görünür |
-| `m` | Uzak Dallar (Birleştir) | Üyelerden gelen uçlar, her birinde **kaç yeni kayıt** olduğu ya da "güncel" olduğu; `enter` üç yönlü birleştirir |
-| `u` | Üyeden Çek İste (Pull) | Bir üyeden ya da (`a`) çevrimiçi herkesten değişikliklerini göndermesini iste |
-| `f` | Dosyalar (Düzenle) | AND'dan çıkmadan dosya oluştur/düzenle/sil (gömülü metin düzenleyici) |
-| `o` | Çalışma Klasörünü Aç | Projenin dosyalarının bulunduğu klasörü sistem dosya yöneticisinde aç |
-| `e` | Dışa Aktar (.zip) | Projenin tüm geçmişini (nesneler + çalışma klasörü) tek bir .zip'e paketle |
+| `d` | Changes | Uncommitted files; `enter` shows the diff, `g` reverts the change (the file goes back to its state in the last commit, a new file is deleted; asks for confirmation), `c` commits |
+| `c` | Commit | Take a snapshot, write a message and create a new commit; the screen shows what will be committed |
+| `l` | Log | Commits on the active branch; `/` searches by message/author/hash, `enter` shows the **commit details** |
+| `b` | Branches | Lists the branches with their last commits; `enter` switches to a branch, `n` creates a branch, `d` deletes a branch (the active branch can't be deleted; its commits stay in the history) |
+| `p` | Push | Send new commits as an encrypted packet to one member or (`a`) to everyone online; the last commit each member knows is shown |
+| `m` | Remote Branches (Merge) | Tips received from members, with **how many new commits** each has or whether it is "up to date"; `enter` merges three-way |
+| `u` | Request Pull from Member | Ask one member or (`a`) everyone online to send their changes |
+| `f` | Files (Edit) | Create/edit/delete files without leaving AND (built-in text editor) |
+| `o` | Open Working Folder | Open the folder with the project's files in the system file manager |
+| `e` | Export (.zip) | Pack the project's whole history (objects + working folder) into a single .zip |
 
-**Kaydın ayrıntısı** (Günlük'te `enter`): kaydın tam kimliği, yazarı, tarihi, önceki kayıtları
-(birleştirme kaydıysa ikisi), mesajı ve değiştirdiği dosyalar. Bir dosyada `enter` o kayıtta neyin
-değiştiğini gösterir; `b` bu kayıttan yeni bir dal açar (eski bir sürüme dönüp oradan ilerlemek için).
+**Commit details** (`enter` in the Log): the commit's full ID, author, date, its parent commits (two
+for a merge commit), the message and the files it changed. `enter` on a file shows what changed in it
+in that commit; `b` creates a new branch from this commit (to go back to an older version and
+continue from there).
 
-**Farklar** uzun dosyalarda yalnızca değişen yerleri ve çevresindeki üç satırı gösterir; aradaki
-değişmeyen bölümler "⋯ 42 satır aynı" olarak katlanır. Üstte eklenen ve silinen satır sayısı yazar.
+**Diffs** of long files show only the changed places and three lines around them; the unchanged parts
+in between are folded as "⋯ 42 lines unchanged". The numbers of added and deleted lines are shown at
+the top.
 
-Projenin dosyaları **Çalışma Klasörü**'nde tutulur (proje panelinde yolu gösterilir) — dosyaları kendi editörünle ya da eklentinin **Dosyalar (Düzenle)** ekranıyla orada düzenle, sonra **Kaydet (Commit)** ile bir kayıt oluştur.
+The project's files are kept in the **Working Folder** (its path is shown in the project panel) —
+edit the files there with your own editor or with the plugin's **Files (Edit)** screen, then create a
+commit with **Commit**.
 
 ### .projeagignore
 
-Çalışma klasörünün köküne bir `.projeagignore` dosyası koyarak (satır başına bir desen) belirli dosya/klasörleri anlık görüntülerin (Durum/Kaydet/Gönder) dışında tutabilirsin — ör. derleme çıktıları, `node_modules`. `/` içermeyen bir desen (ör. `node_modules`, `*.log`) yolun herhangi bir segmentiyle eşleşirse o yolu (ve altındakileri) dışarıda bırakır; `/` içeren desenler köke göre tam yol olarak eşleşir. Dosyanın kendisi normal şekilde izlenir, böylece kurallar grup üyeleri arasında da paylaşılır.
+By putting a `.projeagignore` file (one pattern per line) in the root of the working folder you can
+keep specific files/folders out of snapshots (Status/Commit/Push) — e.g. build output or
+`node_modules`. A pattern without `/` (e.g. `node_modules`, `*.log`) excludes a path (and everything
+under it) if it matches any segment of the path; patterns that contain `/` match the full path from
+the root. The file itself is tracked normally, so the rules are shared among the group members too.
 
-### Birleştirme çakışmaları
+### Merge conflicts
 
-Aynı dosya iki tarafta da farklı şekilde değiştirilmişse, dosya çalışma klasöründe şu işaretlerle yazılır:
+If the same file was changed differently on both sides, it is written to the working folder with these
+markers (`YEREL` means local, `UZAK` means remote):
 
 ```
 <<<<<<< YEREL
-(senin sürümün)
+(your version)
 =======
-(uzak sürüm)
+(the remote version)
 >>>>>>> UZAK
 ```
 
-Dosyayı elle düzenleyip işaretleri kaldırdıktan sonra **Kaydet (Commit)** ile birleştirme kaydını tamamla (`MERGE_HEAD` otomatik temizlenir).
+Edit the file by hand, remove the markers and then complete the merge commit with **Commit**
+(`MERGE_HEAD` is cleared automatically).
 
 ---
 
-## Teknik Detaylar
+## Technical details
 
-### Sürüm kontrol modeli
+### Version control model
 
-İçerik-adresli bir sürüm kontrol modeli: `Blob` (ham içerik), `Agac` (yol → blob hash eşlemi), `Commit` (ağaç + ebeveyn(ler) + yazar/mesaj/zaman). Nesneler `sha256(tip + içerik)` ile adreslenir ve `nesneler/<hash[:2]>/<hash[2:]>` altında tekilleştirilerek saklanır. Dal geçişleri temiz çalışma dizini gerektirir; birleştirmeler ortak atayı bularak (fast-forward veya üç yönlü) uygulanır.
+A content-addressed version control model: `Blob` (raw content), `Agac` (tree: path → blob hash map)
+and `Commit` (tree + parent(s) + author/message/time). Objects are addressed by
+`sha256(type + content)` and stored deduplicated under `nesneler/<hash[:2]>/<hash[2:]>`. Switching
+branches requires a clean working directory; merges find the common ancestor and are applied as a
+fast-forward or a three-way merge.
 
-### Ağ protokolü
+### Network protocol
 
-| Kanal | Kullanım |
+| Channel | Use |
 |-------|----------|
-| DM (`/and/dm/1.0.0`) | Küçük kontrol mesajları — davet, üye/yönetici listesi güncellemesi, push bildirimi, pull isteği, gruptan ayrılma, grup kapatma. `AND-PROJEAG/1\|`-önekli base64 JSON olarak taşınır (önek: `protokol.DeltaXOnEki`); AND bu önekli mesajları okunmamış sayısına katmaz, Özel Chat göstermez. Grup durumunu değiştirenler (davet ve yanıtı, üye listesi, ayrılma, kapatma) giden kutusuyla gönderilir; push bildirimi ve pull isteği doğrudan gider, çünkü dosya aktarımı iki tarafın da çevrimiçi olmasını gerektirir. Gelenler AND'ın DM geçmişinden okunur (bkz. Kalıcılık). |
-| Dosya aktarımı (`/and/file/2.0.0`) | Asıl veri — commit/ağaç/blob nesnelerinin `projeag-<grupID>-<projeID>-<zaman>.pack` adlı gzip'li tar arşivi. Arşiv, göndermeden önce grup sırrıyla AES-256-GCM ile şifrelenir. |
+| DM (`/and/dm/1.0.0`) | Small control messages — invitation, member/admin list update, push notice, pull request, leaving a group, closing a group. They travel as base64 JSON prefixed with `AND-PROJEAG/1\|` (prefix: `protokol.DeltaXOnEki`); AND doesn't count messages with this prefix as unread, and Özel Chat doesn't show them. Messages that change the group state (invitation and its answer, member list, leaving, closing) go through the outbox; the push notice and the pull request go directly, because the file transfer needs both sides to be online. Incoming messages are read from AND's DM history (see Persistence). |
+| File transfer (`/and/file/2.0.0`) | The actual data — a gzipped tar archive of commit/tree/blob objects named `projeag-<groupID>-<projectID>-<time>.pack`. Before sending, the archive is encrypted with the group secret using AES-256-GCM. |
 
-### Güvenlik modeli
+### Security model
 
-- **Grup sırrı:** Her grubun 32 baytlık rastgele bir AES anahtarı vardır; yalnızca davet edilen üyelere DM ile iletilir. Paketler bu anahtarla şifrelenir — grubun dışındaki hiç kimse (aynı AND ağına bağlı olsa bile) içeriği çözemez.
-- **Bütünlük:** Paket içindeki her nesnenin adı kendi sha256 hash'idir; açılırken hash yeniden hesaplanıp doğrulanır, uyuşmayan girdiler sessizce atlanır.
-- **Otomatik dosya onayı yalnızca grup üyelerinden:** AND'ın dosya aktarım onay akışı korunur. `projeag-` önekli bir dosya yalnızca gönderenin libp2p tarafından doğrulanmış Peer ID'si (`FileConsentReq.SenderID` — sahtecilik yapılamaz) yerel olarak bilinen bir grubun üyesiyse otomatik kabul edilir; aksi halde her zamanki gibi elle onay istenir.
-- **Pull isteklerinde hedef doğrulama:** Bir üyenin pull isteğine otomatik yanıt verilirken istekte belirtilen Peer ID, o an yerelde bilinen grup üye listesiyle karşılaştırılır — böylece biri sahte bir hedef Peer ID vererek veriyi grup dışına yönlendiremez.
-- **Kurucu ve yönetici doğrulaması.** Davet/roster/kapatma mesajları yalnızca gönderenin peer ID'si zaten bilinen `KurucuPeer` ya da `Yoneticiler` listesiyle eşleşiyorsa kabul edilir — gruba hiç üye olmayan biri sahte bir mesajla rostere el koyamaz.
-- **Yalnızca davet edilen katılabilir.** Bir "kabul" yanıtı, ancak o eşe o grup için gerçekten davet gönderilmişse ve yanıt 30 gün içinde geldiyse uygulanır. Gönderilen davetler diskte tutulur; bir davet yanıtlandığında (kabul ya da ret) kullanılmış sayılır.
-- **Eski istekler yanıtlanmaz.** DeltaX kapalıyken gelmiş, bir saatten eski bir pull isteğine paket gönderilmez; 30 günden eski bir davet listelenmez.
+- **Group secret:** every group has a random 32-byte AES key that is sent by DM only to invited members. Packets are encrypted with this key — nobody outside the group (even if connected to the same AND network) can decrypt the content.
+- **Integrity:** the name of every object in a packet is its own sha256 hash; when unpacking, the hash is recomputed and checked, and entries that don't match are silently skipped.
+- **Automatic file consent only from group members:** AND's file-transfer consent flow is preserved. A file with the `projeag-` prefix is accepted automatically only if the sender's Peer ID as verified by libp2p (`FileConsentReq.SenderID` — it can't be spoofed) belongs to a member of a group known locally; otherwise manual consent is requested as usual.
+- **Target check on pull requests:** when a member's pull request is answered automatically, the Peer ID given in the request is compared with the group member list known locally at that moment — so nobody can redirect data outside the group by giving a fake target Peer ID.
+- **Founder and admin verification.** Invitation/roster/close messages are accepted only if the sender's peer ID matches the already known `KurucuPeer` (founder) or `Yoneticiler` (admins) list — someone who has never been a member of the group can't take over the roster with a fake message.
+- **Only invited people can join.** An "accept" answer is applied only if an invitation for that group was really sent to that peer and the answer arrived within 30 days. Sent invitations are kept on disk; an invitation counts as used once it has been answered (accepted or rejected).
+- **Old requests are not answered.** No packet is sent for a pull request older than one hour that arrived while DeltaX was closed; an invitation older than 30 days is not listed.
 
-### Kalıcılık
+### Persistence
 
-Tüm veriler `AND_DATA_DIR/DeltaX/` altında yerel olarak saklanır — hiçbir şey merkezi bir sunucuya gönderilmez:
+All data is stored locally under `AND_DATA_DIR/DeltaX/` — nothing is sent to a central server:
 
 ```
 DeltaX/
-  gruplar/<grupID>.json
-  projeler/<projeID>/meta.json       (dallar, aktif dal, uzak dallar)
-  projeler/<projeID>/nesneler/…      (içerik-adresli commit/ağaç/blob deposu)
-  projeler/<projeID>/calisma/…       (çalışma klasörü — burada dosyaları düzenlersin)
-  projeler/<projeID>/MERGE_HEAD      (yalnızca çakışmalı bir birleştirme beklerken var olur)
-  bekleyen_davetler.json             (sana gelen, henüz yanıtlamadığın davetler)
-  gonderilen_davetler.json           (senin gönderdiğin, yanıt bekleyen davetler)
-  dm_imleci.json                     (AND'ın DM geçmişinde nereye kadar işlendiği)
+  gruplar/<groupID>.json
+  projeler/<projectID>/meta.json       (branches, active branch, remote branches)
+  projeler/<projectID>/nesneler/…      (content-addressed commit/tree/blob store)
+  projeler/<projectID>/calisma/…       (working folder — this is where you edit the files)
+  projeler/<projectID>/MERGE_HEAD      (exists only while a conflicting merge is pending)
+  bekleyen_davetler.json               (invitations you received and haven't answered yet)
+  gonderilen_davetler.json             (invitations you sent that are waiting for an answer)
+  dm_imleci.json                       (how far AND's DM history has been processed)
 ```
 
-DeltaX grup mesajlarını AND'ın DM geçmişinden okur ve nereye kadar işlediğini `dm_imleci.json`'a yazar: kapalıyken gelen mesajlar bir sonraki açılışta sırayla işlenir, aynı mesaj iki kez işlenmez. İlk açılışta önceki mesajlar işlenmez. Geçmişi olmayan eski bir AND'da yalnızca açıkken gelen mesajlar alınır.
+DeltaX reads group messages from AND's DM history and writes how far it has processed them to
+`dm_imleci.json`: messages that arrived while it was closed are processed in order on the next
+start, and the same message is never processed twice. On the very first start earlier messages are
+not processed. With an older AND that has no history, only messages that arrive while DeltaX is open
+are received.
 
 ---
 
-## Sınırlamalar
+## Limitations
 
-- **Dosya aktarımı iki tarafın da çevrimiçi olmasını gerektirir.** Grup mesajları (davet, üye listesi, ayrılma, kapatma) çevrimdışı alıcıya bağlandığında iletilir ve DeltaX kapalıyken gelenler kaybolmaz; ama push paketi ve pull isteği ancak karşı taraf o an bağlıyken çalışır.
-- **AND'ın DM geçmişi sınırlıdır.** Geçmiş en fazla 300 makine mesajı tutar (insanların mesajlarından ayrı); DeltaX çok uzun süre kapalı kalırsa en eski grup mesajları düşebilir. Üye listesi bir sonraki güncellemede yeniden yakınsar.
-- **Kurucu değişmez/devredilemez.** Yalnızca "yönetici" (yedek kurucu) ataması yapılabilir — bkz. Kullanım/"Yönetici ata". Kurucu gruptan "çıkamaz" — yalnızca grubu tamamen kapatabilir.
-- **Basitleştirilmiş birleştirme.** Metin tabanlı, satır düzeyinde bir üç yönlü birleştirme yapılır; ikili (binary) dosyalarda çakışma her zaman tüm dosya olarak işaretlenir.
-- **Büyük dosyalar.** Anlık görüntüye dahil edilecek tekil dosyalar 200 MB, satır bazlı fark (diff) için 512 KB, gömülü düzenleyiciyle açılabilecek dosyalar için 2 MB sınırı vardır; üzerindekiler atlanır/bildirilir (harici bir editör/dosya yöneticisi kullanılabilir).
-- **`.projeagignore` ile izlenen/izlenmeyen dosya ayrımı yapılmaz.** Bir dosya daha önce kaydedilmiş, sonradan ignore listesine eklenmişse, sonraki Durum/Kaydet ekranlarında "silinen" olarak görünür.
+- **File transfer needs both sides to be online.** Group messages (invitation, member list, leaving, closing) are delivered to an offline recipient when they connect, and those that arrive while DeltaX is closed aren't lost; but a push packet and a pull request only work while the other side is connected at that moment.
+- **AND's DM history is limited.** The history keeps at most 300 machine messages (separately from people's messages); if DeltaX stays closed for a very long time, the oldest group messages may drop out. The member list converges again with the next update.
+- **The founder can't be changed or handed over.** Only an "admin" (backup founder) can be appointed — see Usage/"Appoint an admin". The founder can't "leave" a group — they can only close the group entirely.
+- **Simplified merging.** A text-based, line-level three-way merge is performed; for binary files a conflict always marks the whole file.
+- **Large files.** There are limits of 200 MB for single files included in a snapshot, 512 KB for line-based diffs and 2 MB for files that can be opened in the built-in editor; anything larger is skipped/reported (an external editor/file manager can be used).
+- **No distinction between tracked and untracked files with `.projeagignore`.** If a file was committed earlier and later added to the ignore list, it shows up as "deleted" on the next Status/Commit screens.
 
 ---
 
@@ -191,45 +223,54 @@ DeltaX grup mesajlarını AND'ın DM geçmişinden okur ve nereye kadar işledi�
 {
   "name":        "DeltaX",
   "label":       "DeltaX",
-  "version":     "1.6.0",
+  "version":     "1.7.1",
   "description": "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
-  "author":      "AND"
+  "author":      "AND",
+  "permissions": ["dm", "file"],
+  "requires":    []
 }
 ```
 
+It asks for the `dm` (group messages) and `file` (project packets) permissions the first time it is
+opened. (The description in the manifest is in Turkish; AND shows it translated in the other
+interface languages.)
+
 ---
 
-## Kaynak
+## Source
 
-Kaynak kod: [Eklentiler/DeltaX/](.)
+Source code: [this repository](.)
 
-| Dosya | İçerik |
+| File | Contents |
 |-------|--------|
-| `main.go` | Manifest, giriş noktası, stiller |
-| `model.go` | Bubble Tea modeli, async komutlar, DM zarf işleme (`zarfIsle`) |
-| `isleyiciler.go` | `Update`: mesaj türü başına işleyiciler; bir ekrana girilince özetini tazeler |
-| `gecmis.go` | DM geçmişinden okuma, imleç, gönderilen davetlerin defteri |
-| `istemci.go` | DeltaX'in kullandığı AND API'si (testlerde sahtesi kullanılır) |
-| `keys.go` | Ekran bazlı klavye olayı işleyicileri |
-| `view.go` | Ekranların görünümü (AND tasarım sistemi: başlık yolu, listeler, iki sütunlu paneller, diyaloglar) |
-| `inceleme.go` | Kaydın değiştirdiği dosyalar ve farkları, değişikliği geri alma, uzak uçtaki yeni kayıt sayısı, fark katlama, göreli zaman |
-| `store.go` | Grup/proje kalıcılığı |
-| `vcs.go` | İçerik-adresli nesne deposu, dal/commit/diff/birleştirme, günlük araması |
-| `crypto.go` | Grup sırrı AES-256-GCM şifreleme |
-| `sync.go` | DM kontrol protokolü, paket oluşturma/uygulama, push/pull/davet/yönetici |
-| `ignore.go` | `.projeagignore` desen eşleştirme |
-| `editor.go` | Gömülü dosya listeleme/okuma/yazma/silme |
-| `export.go` | Projeyi `.zip` olarak dışa aktarma |
+| `main.go` | Manifest, entry point, styles |
+| `model.go` | Bubble Tea model, async commands, DM envelope handling (`zarfIsle`) |
+| `isleyiciler.go` | `Update`: one handler per message type; refreshes a screen's summary when you enter it |
+| `gecmis.go` | Reading from the DM history, the cursor, the ledger of sent invitations |
+| `istemci.go` | The AND API used by DeltaX (tests use a fake) |
+| `keys.go` | Keyboard event handlers per screen |
+| `view.go` | Screen rendering (AND design system: breadcrumb, lists, two-column panels, dialogs) |
+| `inceleme.go` | Files changed by a commit and their diffs, reverting a change, the number of new commits on remote tips, diff folding, relative time |
+| `store.go` | Group/project persistence |
+| `vcs.go` | Content-addressed object store, branch/commit/diff/merge, log search |
+| `crypto.go` | AES-256-GCM encryption with the group secret |
+| `sync.go` | DM control protocol, packet creation/application, push/pull/invite/admin |
+| `ignore.go` | `.projeagignore` pattern matching |
+| `editor.go` | Built-in file listing/reading/writing/deleting |
+| `export.go` | Exporting a project as a `.zip` |
+| `ceviri.go` | Embeds the translations of the plugin's texts (`ceviri.json`); the interface opens in AND's language |
 
 ---
 
-## Sürüm Geçmişi
+## Version history
 
-| Sürüm | Değişiklik |
+| Version | Change |
 |-------|------------|
-| 1.6.0 | Yeni görünüm: AND tasarım sistemi (başlık yolu, etkin dal, seçim çubuklu ve pencereli listeler, ana menüde özet ve son kayıtlar, grup panelinde projeler ve üyeler yan yana, proje panelinde durum kartı ve kısayollu işlemler). Kaydın ayrıntısı ve kayıttaki dosya farkı, kayıttan dal açma, değişikliği geri alma, dal silme, uzak uçlarda birleştirilmemiş kayıt sayısı, çevrimiçi herkesten çek isteme, davette bağlı AND düğümü önerileri, katlanmış farklar. Yeni ya da silinen dosyanın farkında çıkan sahte boş satır düzeltildi |
-| 1.5.0 | Grup mesajları kaçırılmaz: gelenler AND'ın DM geçmişinden okunur (kapalıyken gelenler açılışta işlenir), grup durumunu değiştirenler giden kutusuyla gider; gönderilen davetler diskte tutulur (30 gün), ret bildirilir; eski pull istekleri yanıtlanmaz; davet ederken Peer ID biçimi, kendini ve mevcut üyeyi davet etme denetlenir; makine mesajları Özel Chat'te ve AND'ın okunmamış sayısında görünmez |
-| 1.3.0 | Eklenti adı **ANDSnap**'den **DeltaX**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/DeltaX/` dahil) |
-| 1.2.0 | Eklenti adı **proje_ag**'den **ANDSnap**'e değiştirildi (dizin, manifest, veri klasörü `AND_DATA_DIR/ANDSnap/` dahil) |
-| 1.1.0 | `.projeagignore`, yönetici (yedek kurucu) ataması, gömülü dosya düzenleyici, günlükte arama, projeyi `.zip` olarak dışa aktarma, AND temasını otomatik uygulama, ana menüde `esc` ile çıkış |
-| 1.0.0 | İlk sürüm — gruplar, kendi sürüm kontrol sistemi, uçtan uca şifreli P2P push/pull/birleştirme |
+| 1.7.1 | State files and the working folder are written atomically: a crash or power cut while saving can't corrupt group, project and object files |
+| 1.7.0 | Interface in AND's language (6 languages) |
+| 1.6.0 | New look: AND design system (breadcrumb, active branch, lists with a selection bar and windowing, summary and latest commits on the main menu, projects and members side by side in the group panel, status card and shortcut actions in the project panel). Commit details and per-commit file diffs, creating a branch from a commit, reverting a change, deleting a branch, the number of unmerged commits on remote tips, requesting a pull from everyone online, suggestions of connected AND nodes when inviting, folded diffs. Fixed a fake blank line in the diff of a new or deleted file |
+| 1.5.0 | Group messages are never missed: incoming ones are read from AND's DM history (those that arrived while it was closed are processed at startup), those that change the group state go through the outbox; sent invitations are kept on disk (30 days), and rejections are reported; old pull requests are not answered; when inviting, the Peer ID format, inviting yourself and inviting an existing member are checked; machine messages don't show up in Özel Chat or in AND's unread count |
+| 1.3.0 | The plugin was renamed from **ANDSnap** to **DeltaX** (including the directory, the manifest and the data folder `AND_DATA_DIR/DeltaX/`) |
+| 1.2.0 | The plugin was renamed from **proje_ag** to **ANDSnap** (including the directory, the manifest and the data folder `AND_DATA_DIR/ANDSnap/`) |
+| 1.1.0 | `.projeagignore`, appointing an admin (backup founder), built-in file editor, search in the log, exporting a project as a `.zip`, applying the AND theme automatically, quitting the main menu with `esc` |
+| 1.0.0 | First version — groups, its own version control system, end-to-end encrypted P2P push/pull/merge |
