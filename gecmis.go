@@ -19,7 +19,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lucian95511/and/internal/dosya"
-	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/pluginapi"
 )
 
 const (

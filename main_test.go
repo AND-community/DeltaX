@@ -5,8 +5,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/lucian95511/and/internal/pluginapi"
-	"github.com/lucian95511/and/internal/ui"
+	"github.com/lucian95511/and/pluginapi"
+	"github.com/lucian95511/and/ui"
 )
 
 func TestUygulaTemaRenkleriUygular(t *testing.T) {
@@ -25,7 +25,7 @@ func TestUygulaTemaRenkleriUygular(t *testing.T) {
 }
 
 // TestUygulaTemaBosAlanlarVarsayilanaDuser: boş tema, DeltaX'e özgü değil
-// AND'ın ortak varsayılan temasına (internal/ui) düşmeli — eklentiler artık
+// AND'ın ortak varsayılan temasına (ui) düşmeli — eklentiler artık
 // kendi ayrı paletlerini taşımıyor.
 func TestUygulaTemaBosAlanlarVarsayilanaDuser(t *testing.T) {
 	uygulaTema(pluginapi.ThemeReq{})

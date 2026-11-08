@@ -14,7 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lucian95511/and/dil"
-	"github.com/lucian95511/and/internal/ui"
+	"github.com/lucian95511/and/ui"
 )
 
 // Update, mesajı işler; ardından bir ekrana yeni girildiyse o ekranın

@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/pluginapi"
 )
 
 const pUye = "12D3KooWUyeAbCdEfGhJkLmNpQrStUvWxYz123456789abcdefg"

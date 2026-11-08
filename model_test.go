@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/pluginapi"
 )
 
 // TestDalDegistirCmdBozukHedefCommitCalismaDizininiSilmez, headTreeOf'un

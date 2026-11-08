@@ -1,7 +1,7 @@
 package main
 
 // view.go — ekranların görünümü. Görsel dil AND'ın kendisiyle ortaktır
-// (internal/ui): tam ekran çerçeve, konum izli başlık çubuğu, seçim
+// (ui): tam ekran çerçeve, konum izli başlık çubuğu, seçim
 // çubuklu liste satırları, satır içi bildirimler ve altta kısayol satırı.
 // Her ekran gövdesini ve kısayollarını döndürür; çerçeveyi View kurar.
 // Onay, dosya isteği ve yardım kutuları ekranın ortasında açılır.
@@ -14,7 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lucian95511/and/dil"
-	"github.com/lucian95511/and/internal/ui"
+	"github.com/lucian95511/and/ui"
 )
 
 // icW, tam ekran çerçevenin içerik genişliğidir.

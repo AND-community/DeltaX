@@ -1,6 +1,6 @@
 package main
 
-import "github.com/lucian95511/and/internal/pluginapi"
+import "github.com/lucian95511/and/pluginapi"
 
 // istemci, DeltaX'in AND'ın eklenti API'sinden kullandığı kısımdır.
 // *pluginapi.Client bunu karşılar; testler sahtesini kullanır.

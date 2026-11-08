@@ -23,9 +23,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/lucian95511/and/dil"
-	"github.com/lucian95511/and/internal/pluginapi"
-	"github.com/lucian95511/and/internal/pluginui"
-	"github.com/lucian95511/and/internal/ui"
+	"github.com/lucian95511/and/pluginapi"
+	"github.com/lucian95511/and/pluginui"
+	"github.com/lucian95511/and/ui"
 )
 
 // describeErr, ham bir Go/HTTP hatasını kullanıcıya gösterilecek anlaşılır bir
@@ -37,8 +37,8 @@ func describeErr(err error) string {
 	}
 	msg := err.Error()
 
-	// internal/pluginapi.Client'ın sunucu tarafı hataları "api: <AND'ın kendi
-	// Türkçe mesajı>" biçiminde sarmalanır (bkz. internal/pluginapi/api.go)
+	// pluginapi.Client'ın sunucu tarafı hataları "api: <AND'ın kendi
+	// Türkçe mesajı>" biçiminde sarmalanır (bkz. pluginapi/api.go)
 	// — önek zaten bilgi taşımıyor, atılabilir.
 	if rest, ok := strings.CutPrefix(msg, "api: "); ok {
 		return rest
@@ -121,7 +121,7 @@ func main() {
 //
 // Grup üyelerinden gelen her string (grup adı, kullanıcı adı, commit
 // mesajı, dosya yolu vb.) güvenilmezdir; terminale yazmadan önce ANSI
-// escape dizileri temizlenir — bkz. internal/pluginui.Safe.
+// escape dizileri temizlenir — bkz. pluginui.Safe.
 
 func safe(s string) string { return pluginui.Safe(s) }
 

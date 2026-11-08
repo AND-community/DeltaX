@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/lucian95511/and/dil"
-	"github.com/lucian95511/and/internal/pluginapi"
+	"github.com/lucian95511/and/pluginapi"
 )
 
 // pendingCmd, bir arka plan işlemini m.pending=true ile birlikte başlatan her
