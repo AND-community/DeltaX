@@ -34,7 +34,8 @@ func (m model) tus(k string) (tea.Model, tea.Cmd) { return m.handleKey(tusMsg(k)
 
 // diyalogEkranlari, arayüzde diyalog olarak açılan ekranlardır; Esc (ya da
 // diyaloğun kapatılması) terminaldeki esc'nin yaptığını yapar.
-var diyalogEkranlari = []ekran{ekGrupOlustur, ekProjeOlustur, ekUyeDavet, ekYoneticiSecim, ekOnay, ekYeniDal}
+var diyalogEkranlari = []ekran{ekGrupOlustur, ekProjeOlustur, ekUyeDavet, ekYoneticiSecim, ekOnay, ekYeniDal,
+	ekGonderSecim, ekPullIste, ekDisaAktar, ekYeniDosya, ekDosyaOnay}
 
 func (m model) olayIsle(o arayuz.Olay) (tea.Model, tea.Cmd) {
 	switch o.Olay {
@@ -52,6 +53,14 @@ func (m model) olayIsle(o arayuz.Olay) (tea.Model, tea.Cmd) {
 	case "onayEvet":
 		if m.ekran == ekOnay {
 			return m.tus("y")
+		}
+	case "dosyaOnayEvet", "dosyaOnayHayir":
+		// Gelen dosya onayı her görünümün üstünde açılır.
+		if m.ekran == ekDosyaOnay {
+			if o.ID == "dosyaOnayEvet" {
+				return m.tus("y")
+			}
+			return m.tus("n")
 		}
 
 	// Giriş
@@ -190,6 +199,88 @@ func (m model) projeOlayi(o arayuz.Olay) (tea.Model, tea.Cmd) {
 		m.ekran = ekYeniDal
 		m.yeniDalIn.SetValue(o.Degerler["ad"])
 		return m.tus("enter")
+	// Araç çubuğu
+	case "gonder", "cek", "disaAktar", "klasoruAc":
+		tus := map[string]string{"gonder": "p", "cek": "u", "disaAktar": "e", "klasoruAc": "o"}[o.ID]
+		return m.projeIsleminiCalistir(tus)
+	case "gonderHedefleri", "cekHedefleri":
+		i := slices.IndexFunc(m.uyelerHar, func(u Uye) bool { return u.PeerID == o.Deger })
+		if i < 0 || (m.ekran != ekGonderSecim && m.ekran != ekPullIste) {
+			return m, nil
+		}
+		if m.ekran == ekGonderSecim {
+			m.pushIdx = i
+		} else {
+			m.pullIdx = i
+		}
+		return m.diyalogdanIsle("enter")
+	case "herkeseGonder", "herkestenCekDiyalog":
+		return m.diyalogdanIsle("a")
+	case "herkestenCek":
+		m.uyelerHar = digerUyeler(m.aktifGrup.Uyeler, m.identity.PeerID)
+		geri := m.ekran
+		m.ekran = ekPullIste
+		yeni, cmd := m.tus("a")
+		if y, ok := yeni.(model); ok && y.ekran == ekPullIste {
+			y.ekran = geri
+			return y, cmd
+		}
+		return yeni, cmd
+	case "disaAktarFormu":
+		m.ekran = ekDisaAktar
+		m.disaAktarIn.SetValue(strings.TrimSpace(o.Degerler["hedef"]))
+		return m.tus("enter")
+
+	// Uzak
+	case "birlestir":
+		i := indexOf(m.uzakAnahtarlari, o.Deger)
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.uzakIdx = ekUzakDallar, i
+		return m.tus("enter")
+
+	// Dosyalar
+	case "dosyalar":
+		i := indexOf(m.dosyaListesi, o.Deger)
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.dosyaIdx = ekDosyaListesi, i
+		return m.tus("enter")
+	case "dosyaSil":
+		i := indexOf(m.dosyaListesi, o.Deger)
+		if i < 0 {
+			return m, nil
+		}
+		// Onayı AND sordu; terminaldeki ikinci "d" gibi.
+		m.ekran, m.dosyaIdx, m.dosyaSilOnayi = ekDosyaListesi, i, o.Deger
+		return m.tus("d")
+	case "yeniDosya":
+		m.ekran = ekDosyaListesi
+		return m.tus("n")
+	case "yeniDosyaFormu":
+		m.ekran = ekYeniDosya
+		m.yeniDosyaIn.SetValue(strings.TrimSpace(o.Degerler["yol"]))
+		yeni, cmd := m.tus("enter")
+		if y, ok := yeni.(model); ok && y.ekran == ekDosyaDuzenle {
+			y.duzenleyiciIcerik = "" // yeni dosya boştur
+			return y, cmd
+		}
+		return yeni, cmd
+	case "duzenleyici":
+		if m.ekran != ekDosyaDuzenle {
+			return m, nil
+		}
+		icerik := o.Degerler["icerik"]
+		m.duzenleyiciIcerik = icerik
+		return m, dosyaKaydetCmd(m.calismaDir(), m.dosyaDuzenleYol, icerik)
+	case "duzenleyiciKapat":
+		if m.ekran == ekDosyaDuzenle {
+			m.ekran = ekDosyaListesi
+		}
+		return m, nil
+
 	case "dalaGec", "dalSil":
 		i := indexOf(m.dallar, o.Deger)
 		if i < 0 {
@@ -202,6 +293,20 @@ func (m model) projeOlayi(o arayuz.Olay) (tea.Model, tea.Cmd) {
 		return m.tus("enter")
 	}
 	return m, nil
+}
+
+// diyalogdanIsle, gönder/çek diyaloğunda k tuşuyla işlemi başlatır ve
+// diyaloğu kapatır (işlem arka planda sürer; sonucu ileti olarak gelir).
+func (m model) diyalogdanIsle(k string) (tea.Model, tea.Cmd) {
+	if m.ekran != ekGonderSecim && m.ekran != ekPullIste {
+		return m, nil
+	}
+	yeni, cmd := m.tus(k)
+	if y, ok := yeni.(model); ok && y.pending && (y.ekran == ekGonderSecim || y.ekran == ekPullIste) {
+		y.ekran = ekProjePaneli
+		return y, cmd
+	}
+	return yeni, cmd
 }
 
 // dalDegistirmeyiSor, araç çubuğundaki dal seçiminden sonra dal
@@ -241,7 +346,7 @@ func (m model) geri() (tea.Model, tea.Cmd) {
 	switch arka := m.arkaPlanEkrani(); {
 	case arka == ekGrupPaneli:
 		m.notice, m.ekran = "", ekAnaMenu
-	case m.ekran == ekDiff || m.ekran == ekKayit:
+	case m.ekran == ekDiff || m.ekran == ekKayit || m.ekran == ekDosyaDuzenle:
 		return m.tus("esc") // fark → listesi, kayıt → geçmiş
 	case projeEkraniMi(arka):
 		m.notice, m.ekran = "", ekGrupPaneli

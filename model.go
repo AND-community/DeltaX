@@ -340,6 +340,10 @@ type model struct {
 	sonSekme ekran
 	// diffSatirlar: son farkın satırları (arayüz farkı kendisi çizer).
 	diffSatirlar []DiffSatiri
+	// duzenleyiciIcerik: arayüzdeki düzenleyicide açık dosyanın ham içeriği.
+	// bubbles textarea'dan geçmez: o, sekmeleri boşluğa çevirir ve
+	// maxLines'tan uzun metni keser.
+	duzenleyiciIcerik string
 }
 
 func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {

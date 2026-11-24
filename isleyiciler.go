@@ -503,7 +503,11 @@ func (m model) dosyaListesiGeldi(msg dosyaListesiSonucu) (tea.Model, tea.Cmd) {
 		m.dosyaIdx = max0(len(m.dosyaListesi) - 1)
 	}
 	m.dosyaSilOnayi = ""
-	m.ekran = ekDosyaListesi
+	if m.ekran != ekDosyaDuzenle {
+		// Yeni dosya oluşturulup düzenleyici açıldıysa liste yenilemesi
+		// düzenleyiciyi kapatmaz.
+		m.ekran = ekDosyaListesi
+	}
 	return m, nil
 }
 
@@ -511,6 +515,12 @@ func (m model) dosyaAcildi(msg dosyaAcSonucu) (tea.Model, tea.Cmd) {
 	m.pending = false
 	if msg.err != nil {
 		m.notice, m.isErr = dil.T("Dosya açılamadı: ")+describeErr(msg.err), true
+		return m, nil
+	}
+	if m.arayuzKipi {
+		// Büyük dosyayı dosyaAcCmd zaten reddeder (maxDuzenlenebilirBoyut).
+		m.dosyaDuzenleYol, m.duzenleyiciIcerik = msg.rel, msg.icerik
+		m.ekran = ekDosyaDuzenle
 		return m, nil
 	}
 	m.dosyaDuzenleYol = msg.rel

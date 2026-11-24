@@ -305,8 +305,3 @@ func (m model) dallarSekmesi() arayuz.Oge {
 	return bolum(dil.T("Dallar"), []arayuz.Oge{arayuz.Dugme("yeniDal", dil.T("Yeni dal"), arayuz.Hayalet, arayuz.IleIkon("arti"))},
 		arayuz.Liste("dallarListesi", ogeler, arayuz.IleBos(dil.T("Henüz kayıt yok."))))
 }
-
-// uzakSekmesi ve dosyalarSekmesi arayuz_diyalog.go'da (Görev 10) dolar.
-func (m model) uzakSekmesi() arayuz.Oge { return arayuz.Bos("kure", dil.T("Uzak"), "") }
-
-func (m model) dosyalarSekmesi(ekran) arayuz.Oge { return arayuz.Bos("belge", dil.T("Dosyalar"), "") }

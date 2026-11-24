@@ -396,5 +396,17 @@
   "Geri al": {"en": "Revert", "de": "Zurücksetzen", "es": "Revertir", "fr": "Annuler", "ru": "Откатить"},
   "Bir dosya seç": {"en": "Select a file", "de": "Wähle eine Datei", "es": "Elige un archivo", "fr": "Choisis un fichier", "ru": "Выберите файл"},
   "Seçtiğin dosyanın son kayda göre farkı burada görünür.": {"en": "The selected file's diff against the last commit appears here.", "de": "Der Unterschied der gewählten Datei zum letzten Commit erscheint hier.", "es": "Aquí aparece la diferencia del archivo elegido respecto al último commit.", "fr": "La différence du fichier choisi par rapport au dernier commit s'affiche ici.", "ru": "Здесь появится разница выбранного файла с последним коммитом."},
-  "Yenile": {"en": "Refresh", "de": "Aktualisieren", "es": "Actualizar", "fr": "Actualiser", "ru": "Обновить"}
+  "Yenile": {"en": "Refresh", "de": "Aktualisieren", "es": "Actualizar", "fr": "Actualiser", "ru": "Обновить"},
+
+  "Proje, seçtiğin klasöre bir .zip arşivi olarak yazılır.": {"en": "The project is written to the chosen folder as a .zip archive.", "de": "Das Projekt wird als .zip-Archiv in den gewählten Ordner geschrieben.", "es": "El proyecto se guarda en la carpeta elegida como archivo .zip.", "fr": "Le projet est écrit dans le dossier choisi sous forme d'archive .zip.", "ru": "Проект будет записан в выбранную папку как архив .zip."},
+  "Dosya silinsin mi?": {"en": "Delete the file?", "de": "Datei löschen?", "es": "¿Eliminar el archivo?", "fr": "Supprimer le fichier ?", "ru": "Удалить файл?"},
+  "Birleştir": {"en": "Merge", "de": "Zusammenführen", "es": "Fusionar", "fr": "Fusionner", "ru": "Слить"},
+  "%d yeni": {"en": "%d new", "de": "%d neu", "es": "%d nuevo|%d nuevos", "fr": "%d nouveau|%d nouveaux", "ru": "%d новый|%d новых|%d новых"},
+  "Dosya yolu": {"en": "File path", "de": "Dateipfad", "es": "Ruta del archivo", "fr": "Chemin du fichier", "ru": "Путь к файлу"},
+  "Seçtiğin dosya burada düzenlenir.": {"en": "The selected file is edited here.", "de": "Die gewählte Datei wird hier bearbeitet.", "es": "El archivo elegido se edita aquí.", "fr": "Le fichier choisi se modifie ici.", "ru": "Выбранный файл редактируется здесь."},
+  "Çevrimiçi herkesten çek": {"en": "Pull from everyone online", "de": "Von allen Online-Mitgliedern holen", "es": "Traer de todos los conectados", "fr": "Récupérer de tous les membres en ligne", "ru": "Получить от всех в сети"},
+  "Çalışma klasörü boş.": {"en": "The working folder is empty.", "de": "Der Arbeitsordner ist leer.", "es": "La carpeta de trabajo está vacía.", "fr": "Le dossier de travail est vide.", "ru": "Рабочая папка пуста."},
+  "Çevrimiçi herkese gönder": {"en": "Push to everyone online", "de": "An alle Online-Mitglieder senden", "es": "Enviar a todos los conectados", "fr": "Envoyer à tous les membres en ligne", "ru": "Отправить всем в сети"},
+  "Henüz uzak dal yok. Bir üye değişikliklerini gönderince burada görünür.": {"en": "No remote branches yet. They appear here when a member pushes changes.", "de": "Noch keine Remote-Branches. Sie erscheinen hier, sobald ein Mitglied Änderungen sendet.", "es": "Aún no hay ramas remotas. Aparecen aquí cuando un miembro envía cambios.", "fr": "Aucune branche distante pour l'instant. Elles apparaissent ici quand un membre envoie des modifications.", "ru": "Удалённых веток пока нет. Они появятся здесь, когда участник отправит изменения."},
+  "Hedef klasör": {"en": "Target folder", "de": "Zielordner", "es": "Carpeta de destino", "fr": "Dossier de destination", "ru": "Папка назначения"}
 }

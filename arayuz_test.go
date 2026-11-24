@@ -13,6 +13,7 @@ import (
 
 	"github.com/lucian95511/and/arayuz"
 	"github.com/lucian95511/and/arayuz/arayuztest"
+	"github.com/lucian95511/and/dil/diltest"
 	"github.com/lucian95511/and/pluginapi"
 )
 
@@ -317,4 +318,137 @@ func TestArayuz_DalAdiGecersiz(t *testing.T) {
 	if !ekrandaVar(s.Ekran(), "Dal adında boşluk ya da eğik çizgi olamaz.") {
 		t.Errorf("geçersiz dal adı uyarısı yok: %v", arayuztest.Metinler(s.Ekran()))
 	}
+}
+
+// Düzenleyici, dosyayı olduğu gibi kaydeder: 99 satırdan uzun ve sekmeli
+// içerik kırpılmaz, sekmeler boşluğa dönmez.
+func TestArayuz_DosyaDuzenle(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	s.Yurut(s.SekmeSec("projeSekmeleri", "dosyalar"), 6)
+	s.Tikla("yeniDosya")
+	if s.Ekran().Diyalog == nil {
+		t.Fatal("yeni dosya diyaloğu açılmadı")
+	}
+	s.Yurut(s.FormGonder("yeniDosyaFormu", map[string]string{"yol": "b.go"}), 6)
+	if _, ok := arayuztest.Bul(s.Ekran(), "duzenleyici"); !ok {
+		t.Fatalf("düzenleyici açılmadı: %v", arayuztest.Metinler(s.Ekran()))
+	}
+	icerik := strings.Repeat("func f() {\n\treturn\n}\n", 60) // 180 satır, sekmeli
+	s.Yurut(s.FormGonder("duzenleyici", map[string]string{"icerik": icerik}), 6)
+	b, err := os.ReadFile(filepath.Join(dir, "b.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != icerik {
+		t.Errorf("kaydedilen içerik farklı (%d bayt, beklenen %d)", len(b), len(icerik))
+	}
+	if d, _ := arayuztest.Bul(s.Ekran(), "icerik"); d.Deger != icerik {
+		t.Errorf("düzenleyici kaydedilen içeriği göstermiyor (%d bayt)", len(d.Deger))
+	}
+	s.Tikla("duzenleyiciKapat")
+	if _, ok := arayuztest.Bul(s.Ekran(), "duzenleyici"); ok {
+		t.Error("düzenleyici kapanmadı")
+	}
+	if !slices.ContainsFunc(listeOgeleri(t, s.Ekran(), "dosyalar"), func(o arayuz.ListeOgesi) bool { return o.ID == "b.go" }) {
+		t.Error("yeni dosya listede yok")
+	}
+}
+
+// Review Focus 3: 2 MiB'tan büyük dosya düzenleyicide açılmaz.
+func TestArayuz_BuyukDosya(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	dosyaYaz(t, dir, "c.txt", strings.Repeat("x", 3<<20))
+	s.Yurut(s.SekmeSec("projeSekmeleri", "dosyalar"), 6)
+	s.Yurut(s.Ac("dosyalar", "c.txt"), 6)
+	if _, ok := arayuztest.Bul(s.Ekran(), "duzenleyici"); ok {
+		t.Fatal("3 MiB'lık dosya düzenleyicide açıldı")
+	}
+	if !ekrandaVar(s.Ekran(), "dosya çok büyük") {
+		t.Errorf("büyük dosya iletisi yok: %v", arayuztest.Metinler(s.Ekran()))
+	}
+	arayuztest.Denetle(t, s.Ekran())
+}
+
+// Gelen dosya onayı her görünümün üstünde diyalog olarak açılır.
+func TestArayuz_DosyaOnayi(t *testing.T) {
+	s := arayuzSurucusu(t)
+	s.Gonder(consentPollResultMsg{reqs: []pluginapi.FileConsentReq{{TransferID: "t1", SenderID: pDavetli, Filename: "x.zip", Size: 2048}}})
+	if _, ok := arayuztest.Bul(s.Ekran(), "dosyaOnayEvet"); !ok {
+		t.Fatalf("dosya onayı diyaloğu yok: %+v", s.Ekran().Diyalog)
+	}
+	arayuztest.Denetle(t, s.Ekran())
+	s.Tikla("dosyaOnayEvet")
+	if m := modeli(s); m.pendingConsent != nil || !strings.Contains(m.notice, "kabul edildi") {
+		t.Errorf("onay işlenmedi: %q", m.notice)
+	}
+	if s.Ekran().Diyalog != nil {
+		t.Error("onaydan sonra diyalog kapanmadı")
+	}
+}
+
+// Gönder, çek ve dışa aktar diyalogları; Uzak sekmesi.
+func TestArayuz_ProjeDiyaloglari(t *testing.T) {
+	s := arayuzSurucusu(t)
+	projeKur(t, s)
+	for olay, id := range map[string]string{"gonder": "gonderHedefleri", "cek": "cekHedefleri", "disaAktar": "disaAktarFormu"} {
+		s.Tikla(olay)
+		if _, ok := arayuztest.Bul(s.Ekran(), id); !ok || s.Ekran().Diyalog == nil {
+			t.Errorf("%s diyaloğu (%s) açılmadı", olay, id)
+		}
+		arayuztest.Denetle(t, s.Ekran())
+		s.Yurut(s.DiyalogKapat(), 4) // kapanınca son sekme yenilenir
+		if s.Ekran().Diyalog != nil {
+			t.Errorf("%s diyaloğu kapanmadı", olay)
+		}
+	}
+	s.Yurut(s.SekmeSec("projeSekmeleri", "uzak"), 4)
+	if _, ok := arayuztest.Bul(s.Ekran(), "uzaklar"); !ok {
+		t.Error("Uzak sekmesinde liste yok")
+	}
+}
+
+// TestArayuz_HerDilde: arayüz kipindeki her görünüm ve diyalog altı dilde
+// çevrilmemiş metin içermez ve AND'ın kabul edeceği bir ekrandır. Durumlar
+// terminal ekran testindekilerle aynıdır (aynı model, aynı tuşlar).
+func TestArayuz_HerDilde(t *testing.T) {
+	denetci := diltest.YeniDenetci(t,
+		[]string{"ayşe", "kurucu", "İlk sürüm", "Başlık güncellendi", "Merhaba dünya", "Web Sitesi"},
+		diltest.Oku(t, "ceviri.json", ceviriVerisi))
+	diltest.HerDilde(t, func(kod string) {
+		m, _, _ := ornekProje(t, 140, 40)
+		m.arayuzKipi = true
+		grup := bas(t, m, "esc")
+		ana := bas(t, grup, "esc", "esc")
+		ekranlar := map[string]model{
+			"proje":         m,
+			"degisiklikler": bas(t, m, "d"),
+			"gunluk":        bas(t, m, "l"),
+			"kayit":         bas(t, m, "l", "enter"),
+			"kayit-fark":    bas(t, m, "l", "enter", "enter"),
+			"dallar":        bas(t, m, "b"),
+			"yeni-dal":      bas(t, m, "b", "n"),
+			"dal-sil":       bas(t, m, "b", "down", "d"),
+			"uzak":          bas(t, m, "m"),
+			"gonder":        bas(t, m, "p"),
+			"pull":          bas(t, m, "u"),
+			"dosyalar":      bas(t, m, "f"),
+			"yeni-dosya":    bas(t, m, "f", "n"),
+			"disa-aktar":    bas(t, m, "e"),
+			"grup":          grup,
+			"davet":         bas(t, grup, "i"),
+			"yoneticiler":   bas(t, grup, "y"),
+			"grubu-kapat":   bas(t, grup, "x"),
+			"ana":           ana,
+			"yeni-grup":     bas(t, ana, "down", "enter"),
+		}
+		for ad, e := range ekranlar {
+			ekran := e.Arayuz()
+			arayuztest.Denetle(t, ekran)
+			for _, k := range denetci.Kalintilar(kod, strings.Join(arayuztest.Metinler(ekran), "\n")) {
+				t.Errorf("%s %s: %s", kod, ad, k)
+			}
+		}
+	})
 }

@@ -156,7 +156,7 @@ func (m model) girisGorunumu() (sol, sag []arayuz.Oge) {
 	}
 	sag = append(sag, arayuz.Kart(
 		arayuz.Baslik(2, safe(m.identity.Name)),
-		arayuz.AnahtarDeger(arayuz.Cift{Anahtar: "Peer ID", Deger: m.identity.PeerID, Kod: true, Kopyala: true}),
+		arayuz.AnahtarDeger(arayuz.Cift{Anahtar: dil.T("Peer ID"), Deger: m.identity.PeerID, Kod: true, Kopyala: true}),
 		arayuz.Metin(dil.T("Seni bir gruba davet etmek isteyen kişi bu Peer ID'yi kullanır."), arayuz.Soluk),
 	))
 	if len(m.sonKayitlar) > 0 {
@@ -250,6 +250,9 @@ func formDiyalogu(id, baslik, aciklama string, form arayuz.Oge, tamam string) *a
 
 // diyalogu, açık ekran bir diyalogsa onun tarifidir.
 func (m model) diyalogu() *arayuz.Diyalog {
+	if d := m.projeDiyalogu(); d != nil {
+		return d
+	}
 	switch m.ekran {
 	case ekGrupOlustur:
 		return formDiyalogu("yeniGrupD", dil.T("Yeni grup"),
@@ -267,7 +270,7 @@ func (m model) diyalogu() *arayuz.Diyalog {
 			oneriler = append(oneriler, arayuz.Oneri{Deger: p.PeerID, Etiket: kisaPeer(p.PeerID)})
 		}
 		return formDiyalogu("uyeDavetD", dil.T("Üye davet et"), "",
-			arayuz.Form("davetFormu", arayuz.Girdi("peer", "Peer ID", m.uyeDavetIn.Value(), arayuz.Odakli, arayuz.Zorunlu,
+			arayuz.Form("davetFormu", arayuz.Girdi("peer", dil.T("Peer ID"), m.uyeDavetIn.Value(), arayuz.Odakli, arayuz.Zorunlu,
 				arayuz.IleYerTutucu("12D3KooW…"), arayuz.IleOneriler(oneriler...),
 				arayuz.IleAciklama(dil.T("Kişi kendi Peer ID'sini DeltaX'in giriş ekranından paylaşabilir.")))),
 			dil.T("Davet et"))
