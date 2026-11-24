@@ -355,5 +355,24 @@
   "onayla": {"en": "confirm", "de": "bestätigen", "es": "confirmar", "fr": "confirmer", "ru": "подтвердить"},
   "Kısayollar": {"en": "Shortcuts", "de": "Tastenkürzel", "es": "Atajos", "fr": "Raccourcis", "ru": "Горячие клавиши"},
   "Her zaman: ctrl+c çıkış": {"en": "Always: ctrl+c quits", "de": "Immer: ctrl+c beendet", "es": "Siempre: ctrl+c para salir", "fr": "Toujours : ctrl+c pour quitter", "ru": "Всегда: ctrl+c — выход"},
-  "herhangi bir tuş — geri dön": {"en": "any key — go back", "de": "beliebige Taste — zurück", "es": "cualquier tecla — volver", "fr": "n'importe quelle touche — retour", "ru": "любая клавиша — назад"}
+  "herhangi bir tuş — geri dön": {"en": "any key — go back", "de": "beliebige Taste — zurück", "es": "cualquier tecla — volver", "fr": "n'importe quelle touche — retour", "ru": "любая клавиша — назад"},
+
+  "sen": {"en": "you", "de": "du", "es": "tú", "fr": "toi", "ru": "вы"},
+  "Reddet": {"en": "Decline", "de": "Ablehnen", "es": "Rechazar", "fr": "Refuser", "ru": "Отклонить"},
+  "Kabul et": {"en": "Accept", "de": "Annehmen", "es": "Aceptar", "fr": "Accepter", "ru": "Принять"},
+  "Oluştur": {"en": "Create", "de": "Erstellen", "es": "Crear", "fr": "Créer", "ru": "Создать"},
+  "Vazgeç": {"en": "Cancel", "de": "Abbrechen", "es": "Cancelar", "fr": "Annuler", "ru": "Отмена"},
+  "Davet et": {"en": "Invite", "de": "Einladen", "es": "Invitar", "fr": "Inviter", "ru": "Пригласить"},
+  "Projeler": {"en": "Projects", "de": "Projekte", "es": "Proyectos", "fr": "Projets", "ru": "Проекты"},
+  "Üyeler": {"en": "Members", "de": "Mitglieder", "es": "Miembros", "fr": "Membres", "ru": "Участники"},
+  "çevrimiçi": {"en": "online", "de": "online", "es": "en línea", "fr": "en ligne", "ru": "в сети"},
+  "%d üye": {"en": "%d member|%d members", "de": "%d Mitglied|%d Mitglieder", "es": "%d miembro|%d miembros", "fr": "%d membre|%d membres", "ru": "%d участник|%d участника|%d участников"},
+  "Davet eden: %s": {"en": "Invited by %s", "de": "Eingeladen von %s", "es": "Invitación de %s", "fr": "Invité par %s", "ru": "Пригласил(а): %s"},
+  "Henüz bir grubun yok.": {"en": "You don't have a group yet.", "de": "Du hast noch keine Gruppe.", "es": "Aún no tienes ningún grupo.", "fr": "Tu n'as encore aucun groupe.", "ru": "У вас пока нет групп."},
+  "Bu grupta henüz proje yok.": {"en": "This group has no projects yet.", "de": "Diese Gruppe hat noch keine Projekte.", "es": "Este grupo aún no tiene proyectos.", "fr": "Ce groupe n'a encore aucun projet.", "ru": "В этой группе пока нет проектов."},
+  "Grupta senden başka üye yok.": {"en": "There are no other members in the group.", "de": "Außer dir gibt es keine Mitglieder in der Gruppe.", "es": "No hay más miembros en el grupo.", "fr": "Il n'y a pas d'autre membre dans le groupe.", "ru": "Кроме вас, в группе нет участников."},
+  "Bir grup kur ve üyelerini davet et; projeleriniz yalnızca grup üyeleri arasında, uçtan uca şifreli eşitlenir.": {"en": "Create a group and invite its members; your projects sync end-to-end encrypted, only between group members.", "de": "Erstelle eine Gruppe und lade Mitglieder ein; eure Projekte werden Ende-zu-Ende-verschlüsselt nur zwischen den Gruppenmitgliedern synchronisiert.", "es": "Crea un grupo e invita a sus miembros; vuestros proyectos se sincronizan cifrados de extremo a extremo, solo entre los miembros del grupo.", "fr": "Crée un groupe et invite ses membres ; vos projets se synchronisent, chiffrés de bout en bout, uniquement entre les membres du groupe.", "ru": "Создайте группу и пригласите участников: проекты синхронизируются со сквозным шифрованием только между участниками группы."},
+  "Kişi kendi Peer ID'sini DeltaX'in giriş ekranından paylaşabilir.": {"en": "The person can share their Peer ID from DeltaX's home screen.", "de": "Die Person kann ihre Peer-ID auf dem Startbildschirm von DeltaX teilen.", "es": "La persona puede compartir su Peer ID desde la pantalla de inicio de DeltaX.", "fr": "La personne peut partager son Peer ID depuis l'écran d'accueil de DeltaX.", "ru": "Человек может поделиться своим Peer ID с главного экрана DeltaX."},
+  "Seni bir gruba davet etmek isteyen kişi bu Peer ID'yi kullanır.": {"en": "Anyone who wants to invite you to a group uses this Peer ID.", "de": "Wer dich in eine Gruppe einladen möchte, verwendet diese Peer-ID.", "es": "Quien quiera invitarte a un grupo usa este Peer ID.", "fr": "Quiconque veut t'inviter dans un groupe utilise ce Peer ID.", "ru": "Тот, кто хочет пригласить вас в группу, использует этот Peer ID."},
+  "Bir üyeye tıklayınca yöneticiliği açılır ya da kapanır.": {"en": "Click a member to grant or revoke manager rights.", "de": "Klicke auf ein Mitglied, um ihm Verwalterrechte zu geben oder zu entziehen.", "es": "Haz clic en un miembro para darle o quitarle los permisos de administrador.", "fr": "Clique sur un membre pour lui donner ou retirer les droits de gestion.", "ru": "Нажмите на участника, чтобы выдать или отозвать права управляющего."}
 }

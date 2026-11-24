@@ -1,10 +1,11 @@
 {
   "name":        "DeltaX",
   "label":       "DeltaX",
-  "version":     "1.7.1",
+  "version":     "1.8.0",
   "description": "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
   "author":      "AND",
   "permissions": ["dm", "file"],
   "category":    "development",
+  "ui":          1,
   "requires":    []
 }

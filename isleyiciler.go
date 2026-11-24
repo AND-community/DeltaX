@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/lucian95511/and/arayuz"
 	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/ui"
 )
@@ -104,6 +105,14 @@ func (m model) guncelle(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.disaAktarildi(msg)
 	case tea.KeyMsg:
 		return m.tusaBasildi(msg)
+	case arayuz.Merhaba:
+		m.arayuzKipi = true
+		m.gruplar = gruplariListele(m.dataDir)
+		return m, nil
+	case arayuz.Olay:
+		return m.olayIsle(msg)
+	case arayuz.Gorunurluk:
+		return m, nil
 	}
 	return m.girdiyeIlet(msg)
 }

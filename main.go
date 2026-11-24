@@ -22,6 +22,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/lucian95511/and/arayuz"
 	"github.com/lucian95511/and/dil"
 	"github.com/lucian95511/and/pluginapi"
 	"github.com/lucian95511/and/pluginui"
@@ -68,10 +69,13 @@ func describeErr(err error) string {
 var manifest = pluginapi.Manifest{
 	Name:        "DeltaX",
 	Label:       "DeltaX",
-	Version:     "1.7.1",
+	Version:     "1.8.0",
 	Description: "Özel gruplar kurup kendi sürüm kontrol sistemiyle birlikte proje geliştirme — merkezi ağ dışında, yalnızca grup üyeleri arasında uçtan uca şifreli senkronizasyon",
 	Author:      "AND",
 	Permissions: []string{pluginapi.IzinDM, pluginapi.IzinDosya},
+	// UI: AND masaüstünde terminal yerine AND'ın bileşenleriyle açılır (bkz.
+	// arayuz.go).
+	UI: arayuz.Surum,
 }
 
 func main() {
@@ -110,6 +114,14 @@ func main() {
 	}
 
 	m := newModel(client, identity, dataDir)
+	if arayuz.Etkin() {
+		// AND masaüstü: ekran AND'ın bileşenleriyle çizilir (bkz. arayuz.go).
+		if err := arayuz.Calistir(m); err != nil {
+			fmt.Fprintln(os.Stderr, "DeltaX:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintln(os.Stderr, "DeltaX:", err)

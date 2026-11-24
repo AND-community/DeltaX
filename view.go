@@ -934,14 +934,14 @@ func boyutYaz(n int64) string {
 	return fmt.Sprintf("%.1f MB", float64(n)/1024/1024)
 }
 
-// viewOnay, yıkıcı işlemler için ortak onay kutusudur (bkz. keyOnay).
-func (m model) viewOnay() string {
-	var baslik string
-	var satirlar []string
+// onayMetni, yıkıcı işlemin onayının başlığı ve satırlarıdır (m.onayTip);
+// terminaldeki onay kutusu (viewOnay) ve arayüzdeki onay diyaloğu bunu
+// gösterir. Gösterilecek bir şey yoksa başlık boştur.
+func (m model) onayMetni() (baslik string, satirlar []string) {
 	switch m.onayTip {
 	case onayGrupCikKapat:
 		if m.aktifGrup == nil {
-			return ""
+			return "", nil
 		}
 		g := m.aktifGrup
 		if g.yetkiliMi(m.identity.PeerID) {
@@ -986,6 +986,15 @@ func (m model) viewOnay() string {
 		baslik = dil.T("Dalı sil")
 		satirlar = []string{dil.F("⎇ %s dalını silmek üzeresin.", safe(ad)),
 			dil.T("Kayıtlar geçmişte durur; yalnızca dalın adı kalkar.")}
+	}
+	return baslik, satirlar
+}
+
+// viewOnay, yıkıcı işlemler için ortak onay kutusudur (bkz. keyOnay).
+func (m model) viewOnay() string {
+	baslik, satirlar := m.onayMetni()
+	if baslik == "" {
+		return ""
 	}
 	var b strings.Builder
 	b.WriteString(ui.S.Warning.Bold(true).Render(baslik) + "\n\n")

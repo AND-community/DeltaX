@@ -215,7 +215,8 @@ type geriAlSonucu struct {
 
 // sonKayit, ana menüdeki "Son kayıtlar" listesinin bir satırıdır.
 type sonKayit struct {
-	grup, proje string
+	grup, proje     string
+	grupID, projeID string
 	LogGirdisi
 }
 
@@ -330,6 +331,10 @@ type model struct {
 
 	onayTip       onayTipi
 	onayGeriEkran ekran
+
+	// arayuzKipi: DeltaX AND masaüstünde arayüz kipinde çalışıyor (bkz.
+	// arayuz.go); AND'ın merhaba mesajıyla açılır.
+	arayuzKipi bool
 }
 
 func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {
@@ -574,7 +579,7 @@ func sonKayitlarCmd(dataDir string) tea.Cmd {
 		for _, g := range gruplariListele(dataDir) {
 			for _, p := range projeleriListele(dataDir, g.ID) {
 				for _, k := range gunlukAl(dataDir, p.ID, p.Dallar[p.AktifDal], 3) {
-					out = append(out, sonKayit{grup: g.Ad, proje: p.Ad, LogGirdisi: k})
+					out = append(out, sonKayit{grup: g.Ad, proje: p.Ad, grupID: g.ID, projeID: p.ID, LogGirdisi: k})
 				}
 			}
 		}
