@@ -33,7 +33,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch yeni.ekran {
 	case ekProjePaneli:
 		if yeni.aktifProje != nil {
-			return yeni, tea.Batch(cmd, projeOzetiCmd(yeni.dataDir, *yeni.aktifProje, yeni.calismaDir()))
+			ozet := projeOzetiCmd(yeni.dataDir, *yeni.aktifProje, yeni.calismaDir())
+			if yeni.arayuzKipi && !yeni.pending && !yeni.isErr {
+				// Arayüzde proje paneli ayrı bir ekran değildir: son sekme açılır.
+				s, scmd := yeni.sekmeyiAc(yeni.sonSekme)
+				return s, tea.Batch(cmd, ozet, scmd)
+			}
+			return yeni, tea.Batch(cmd, ozet)
 		}
 	case ekGrupPaneli:
 		yeni.projeSonKayit = sonKayitlari(yeni.dataDir, yeni.projeler)
@@ -413,6 +419,7 @@ func (m model) diffGeldi(msg diffSonucu) (tea.Model, tea.Cmd) {
 		m.notice, m.isErr = describeErr(msg.err), true
 		return m, nil
 	}
+	m.diffSatirlar = msg.satirlar
 	m.diffEklenen, m.diffSilinen = diffSay(msg.satirlar)
 	m.diffVP.SetContent(diffMetni(msg.satirlar))
 	m.diffVP.GotoTop()

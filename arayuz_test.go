@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -161,5 +165,156 @@ func TestArayuz_GecerliEkran(t *testing.T) {
 	}
 	if m := modeli(s); m.ekran != ekGrupPaneli {
 		t.Errorf("diyaloglar kapanınca ekran %v", m.ekran)
+	}
+}
+
+// projeKur, arayüzden bir grup ve içinde bir proje kurar, projeyi açar ve
+// projenin çalışma klasörünü döner.
+func projeKur(t *testing.T, s *arayuztest.Surucu) string {
+	t.Helper()
+	s.Yurut(s.Ac("gruplar", grupKur(t, s, "Ekip")), 2)
+	s.Tikla("yeniProje")
+	s.Yurut(s.FormGonder("projeFormu", map[string]string{"ad": "arayuz"}), 4)
+	p := listeOgeleri(t, s.Ekran(), "projeler")
+	if len(p) != 1 {
+		t.Fatalf("proje kurulamadı: %+v", p)
+	}
+	s.Yurut(s.Ac("projeler", p[0].ID), 6)
+	dir := modeli(s).calismaDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func dosyaYaz(t *testing.T, dir, ad, icerik string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, ad), []byte(icerik), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// arayuzdenKaydet, Değişiklikler sekmesinden bir kayıt oluşturur.
+func arayuzdenKaydet(t *testing.T, s *arayuztest.Surucu, mesaj string) {
+	t.Helper()
+	s.Yurut(s.SekmeSec("projeSekmeleri", "degisiklikler"), 6)
+	s.Yurut(s.FormGonder("commitFormu", map[string]string{"mesaj": mesaj}), 8)
+}
+
+func TestArayuz_DegisikliklerVeKayit(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	e := s.Ekran()
+	if len(e.Yol) != 3 || e.Yol[2].Metin != "arayuz" {
+		t.Errorf("proje kırıntıları = %+v", e.Yol)
+	}
+	dosyaYaz(t, dir, "a.txt", "merhaba\n")
+	s.Yurut(s.SekmeSec("projeSekmeleri", "degisiklikler"), 6)
+	d := listeOgeleri(t, s.Ekran(), "degisiklikler")
+	if len(d) != 1 || d[0].ID != "a.txt" || len(d[0].Rozetler) == 0 || d[0].Rozetler[0].Metin != "A" {
+		t.Fatalf("değişiklikler = %+v", d)
+	}
+	s.Yurut(s.Sec("degisiklikler", "a.txt"), 6)
+	f, ok := arayuztest.Bul(s.Ekran(), "fark")
+	if !ok || len(f.Dosyalar) != 1 || !slices.ContainsFunc(f.Dosyalar[0].Satirlar, func(l arayuz.FarkSatiri) bool { return l.Tur == "+" && l.Metin == "merhaba" }) {
+		t.Fatalf("fark = %+v", f)
+	}
+	s.Yurut(s.FormGonder("commitFormu", map[string]string{"mesaj": "ilk"}), 8)
+	if !ekrandaVar(s.Ekran(), "Kayıt oluşturuldu") {
+		t.Errorf("kayıt iletisi yok: %v", arayuztest.Metinler(s.Ekran()))
+	}
+	if g, _ := arayuztest.Bul(s.Ekran(), "commitFormu"); g.Cocuklar != nil {
+		if m, _ := arayuztest.Bul(s.Ekran(), "mesaj"); m.Deger != "" {
+			t.Errorf("kayıttan sonra mesaj kutusu boşalmadı: %q", m.Deger)
+		}
+	}
+	s.Yurut(s.SekmeSec("projeSekmeleri", "gecmis"), 6)
+	k := listeOgeleri(t, s.Ekran(), "kayitlar")
+	if len(k) != 1 || k[0].Baslik != "ilk" {
+		t.Fatalf("geçmiş = %+v", k)
+	}
+	s.Yurut(s.Sec("kayitlar", k[0].ID), 6)
+	if o := listeOgeleri(t, s.Ekran(), "kayitDosyalari"); len(o) != 1 || o[0].ID != "a.txt" {
+		t.Errorf("kaydın dosyaları = %+v", o)
+	}
+	arayuztest.Denetle(t, s.Ekran())
+}
+
+// Review Focus 4: işlem sürerken ikinci "Kaydet" yeni bir işlem başlatmaz.
+func TestArayuz_CiftKaydet(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	dosyaYaz(t, dir, "a.txt", "x\n")
+	s.Yurut(s.SekmeSec("projeSekmeleri", "degisiklikler"), 6)
+	if c := s.FormGonder("commitFormu", map[string]string{"mesaj": "bir"}); c == nil {
+		t.Fatal("ilk kayıt başlamadı")
+	}
+	if c := s.FormGonder("commitFormu", map[string]string{"mesaj": "iki"}); c != nil {
+		t.Error("işlem sürerken ikinci kayıt başladı")
+	}
+}
+
+// Review Focus 3: büyük fark protokol sınırını aşmaz. DeltaX taraf başına
+// maxDiffSatir (2000) satırdan büyük dosyanın farkını hiç hesaplamaz; iki
+// tarafı da sınırın altında olup toplamı aşan fark (1500 satırın hepsi
+// değişti) farkSiniri satırda kesilir.
+func TestArayuz_BuyukFark(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	var eski, yeni strings.Builder
+	for i := range 1500 {
+		fmt.Fprintln(&eski, "eski", i)
+		fmt.Fprintln(&yeni, "yeni", i)
+	}
+	dosyaYaz(t, dir, "buyuk.txt", eski.String())
+	arayuzdenKaydet(t, s, "ilk")
+	dosyaYaz(t, dir, "buyuk.txt", yeni.String())
+	s.Yurut(s.SekmeSec("projeSekmeleri", "degisiklikler"), 6)
+	s.Yurut(s.Sec("degisiklikler", "buyuk.txt"), 6)
+	f, ok := arayuztest.Bul(s.Ekran(), "fark")
+	if !ok || len(f.Dosyalar) != 1 {
+		t.Fatalf("fark yok: %v", arayuztest.Metinler(s.Ekran()))
+	}
+	d := f.Dosyalar[0]
+	son := d.Satirlar[len(d.Satirlar)-1]
+	kalan := len(modeli(s).diffSatirlar) - farkSiniri
+	if len(d.Satirlar) != farkSiniri+1 || son.Tur != "@" || kalan <= 0 || !strings.Contains(son.Metin, strconv.Itoa(kalan)) {
+		t.Errorf("%d satır (+%d −%d), son satır %+v; %d satır ve '… %d satır daha' bekleniyordu", len(d.Satirlar), d.Eklenen, d.Silinen, son, farkSiniri+1, kalan)
+	}
+	arayuztest.Denetle(t, s.Ekran())
+}
+
+func TestArayuz_DalOlusturVeGec(t *testing.T) {
+	s := arayuzSurucusu(t)
+	dir := projeKur(t, s)
+	dosyaYaz(t, dir, "a.txt", "x\n")
+	arayuzdenKaydet(t, s, "ilk")
+	s.Yurut(s.SekmeSec("projeSekmeleri", "dallar"), 4)
+	s.Tikla("yeniDal")
+	if s.Ekran().Diyalog == nil {
+		t.Fatal("yeni dal diyaloğu açılmadı")
+	}
+	s.FormGonder("dalFormu", map[string]string{"ad": "deneme"})
+	if !slices.ContainsFunc(listeOgeleri(t, s.Ekran(), "dallarListesi"), func(o arayuz.ListeOgesi) bool { return o.ID == "deneme" }) {
+		t.Fatal("yeni dal listede yok")
+	}
+	s.TiklaSatir("dalaGec", "deneme")
+	if _, ok := arayuztest.Bul(s.Ekran(), "onayEvet"); !ok {
+		t.Fatal("dal değiştirme onayı sorulmadı")
+	}
+	s.Yurut(s.Tikla("onayEvet"), 8)
+	if d, ok := arayuztest.Bul(s.Ekran(), "dal"); !ok || d.Deger != "deneme" {
+		t.Errorf("etkin dal = %+v", d)
+	}
+}
+
+func TestArayuz_DalAdiGecersiz(t *testing.T) {
+	s := arayuzSurucusu(t)
+	projeKur(t, s)
+	s.Yurut(s.SekmeSec("projeSekmeleri", "dallar"), 4)
+	s.Tikla("yeniDal")
+	s.FormGonder("dalFormu", map[string]string{"ad": "a b"})
+	if !ekrandaVar(s.Ekran(), "Dal adında boşluk ya da eğik çizgi olamaz.") {
+		t.Errorf("geçersiz dal adı uyarısı yok: %v", arayuztest.Metinler(s.Ekran()))
 	}
 }

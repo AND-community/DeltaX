@@ -34,7 +34,7 @@ func (m model) tus(k string) (tea.Model, tea.Cmd) { return m.handleKey(tusMsg(k)
 
 // diyalogEkranlari, arayüzde diyalog olarak açılan ekranlardır; Esc (ya da
 // diyaloğun kapatılması) terminaldeki esc'nin yaptığını yapar.
-var diyalogEkranlari = []ekran{ekGrupOlustur, ekProjeOlustur, ekUyeDavet, ekYoneticiSecim, ekOnay}
+var diyalogEkranlari = []ekran{ekGrupOlustur, ekProjeOlustur, ekUyeDavet, ekYoneticiSecim, ekOnay, ekYeniDal}
 
 func (m model) olayIsle(o arayuz.Olay) (tea.Model, tea.Cmd) {
 	switch o.Olay {
@@ -122,7 +122,106 @@ func (m model) olayIsle(o arayuz.Olay) (tea.Model, tea.Cmd) {
 		m.ekran = ekGrupPaneli
 		return m.tus("x")
 	}
+	if m.aktifProje != nil {
+		return m.projeOlayi(o)
+	}
 	return m, nil
+}
+
+// projeOlayi, proje görünümünün olaylarıdır.
+func (m model) projeOlayi(o arayuz.Olay) (tea.Model, tea.Cmd) {
+	switch o.ID {
+	case "yolGrup":
+		m.notice, m.ekran = "", ekGrupPaneli
+		return m, nil
+	case "projeSekmeleri":
+		for _, s := range projeSekmeleri {
+			if s.kod == o.Deger {
+				m.notice = ""
+				return m.sekmeyiAc(s.ekran)
+			}
+		}
+	case "yenile":
+		return m.sekmeyiAc(m.sonSekme)
+	case "dal":
+		return m.dalDegistirmeyiSor(o.Deger), nil
+
+	// Değişiklikler
+	case "degisiklikler", "geriAl":
+		liste := degisiklikListesi(m.durum)
+		i := slices.IndexFunc(liste, func(d DosyaDegisikligi) bool { return d.Yol == o.Deger })
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.durumIdx = ekDurum, i
+		if o.ID == "geriAl" {
+			return m.tus("g")
+		}
+		return m.tus("enter")
+	case "commitFormu":
+		m.ekran = ekCommitMesaj
+		m.commitMsgIn.SetValue(o.Degerler["mesaj"])
+		return m.tus("enter")
+
+	// Geçmiş
+	case "kayitlar":
+		i := slices.IndexFunc(m.gunlukGorunur(), func(k LogGirdisi) bool { return k.Hash == o.Deger })
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.gunlukIdx = ekGunluk, i
+		return m.tus("enter")
+	case "kayitDosyalari":
+		i := slices.IndexFunc(m.kayit.degisiklikler, func(d DosyaDegisikligi) bool { return d.Yol == o.Deger })
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.kayit.idx = ekKayit, i
+		return m.tus("enter")
+	case "buradanDal":
+		m.ekran = ekKayit
+		return m.tus("b")
+
+	// Dallar
+	case "yeniDal":
+		m.ekran = ekDallar
+		return m.tus("n")
+	case "dalFormu":
+		m.ekran = ekYeniDal
+		m.yeniDalIn.SetValue(o.Degerler["ad"])
+		return m.tus("enter")
+	case "dalaGec", "dalSil":
+		i := indexOf(m.dallar, o.Deger)
+		if i < 0 {
+			return m, nil
+		}
+		m.ekran, m.dalIdx = ekDallar, i
+		if o.ID == "dalSil" {
+			return m.tus("d")
+		}
+		return m.tus("enter")
+	}
+	return m, nil
+}
+
+// dalDegistirmeyiSor, araç çubuğundaki dal seçiminden sonra dal
+// değiştirmenin onayını açar (terminaldeki Dallar ekranındaki enter gibi).
+func (m model) dalDegistirmeyiSor(hedef string) model {
+	if m.pending || hedef == m.aktifProje.AktifDal {
+		return m
+	}
+	m.dallar = dalAnahtarlari(m.aktifProje.Dallar)
+	i := indexOf(m.dallar, hedef)
+	if i < 0 {
+		return m
+	}
+	m.dalIdx = i
+	m.onayTip, m.onayGeriEkran = onayDalDegistir, m.ekran
+	if slices.Contains(diyalogEkranlari, m.onayGeriEkran) {
+		m.onayGeriEkran = ekProjePaneli
+	}
+	m.ekran = ekOnay
+	return m
 }
 
 // diyalogKapat, açık diyaloğu terminaldeki esc gibi kapatır.
@@ -139,8 +238,13 @@ func (m model) geri() (tea.Model, tea.Cmd) {
 	if slices.Contains(diyalogEkranlari, m.ekran) {
 		return m.diyalogKapat()
 	}
-	if m.arkaPlanEkrani() == ekGrupPaneli {
+	switch arka := m.arkaPlanEkrani(); {
+	case arka == ekGrupPaneli:
 		m.notice, m.ekran = "", ekAnaMenu
+	case m.ekran == ekDiff || m.ekran == ekKayit:
+		return m.tus("esc") // fark → listesi, kayıt → geçmiş
+	case projeEkraniMi(arka):
+		m.notice, m.ekran = "", ekGrupPaneli
 	}
 	return m, nil
 }

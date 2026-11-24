@@ -335,6 +335,11 @@ type model struct {
 	// arayuzKipi: DeltaX AND masaüstünde arayüz kipinde çalışıyor (bkz.
 	// arayuz.go); AND'ın merhaba mesajıyla açılır.
 	arayuzKipi bool
+	// sonSekme: arayüzde proje görünümünün son açılan sekmesi (ekDurum,
+	// ekGunluk…); proje yeniden açılınca ya da bir işlemden sonra o açılır.
+	sonSekme ekran
+	// diffSatirlar: son farkın satırları (arayüz farkı kendisi çizer).
+	diffSatirlar []DiffSatiri
 }
 
 func newModel(c istemci, id pluginapi.IdentityInfo, dataDir string) model {

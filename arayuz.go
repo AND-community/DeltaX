@@ -48,32 +48,55 @@ func (m model) arkaPlanEkrani() ekran {
 // Arayuz, DeltaX'in arayüz kipindeki ekranıdır (bkz. arayuz.Model).
 func (m model) Arayuz() arayuz.Ekran {
 	e := arayuz.Ekran{Ikon: "kod", Mesgul: m.pending}
-	var sol, sag []arayuz.Oge
+	var govde arayuz.Oge
 	switch arka := m.arkaPlanEkrani(); {
+	case projeEkraniMi(arka) && m.aktifProje != nil && m.aktifGrup != nil:
+		e.Yol = []arayuz.Kirinti{{ID: "yolAna", Metin: "DeltaX"}, {ID: "yolGrup", Metin: safe(m.aktifGrup.Ad)}, {Metin: safe(m.aktifProje.Ad)}}
+		e.Araclar = m.projeAraclari()
+		govde = m.projeGorunumu(arka)
+		e.Durum = m.uyeDurumu()
 	case arka == ekGrupPaneli && m.aktifGrup != nil:
 		e.Yol = []arayuz.Kirinti{{ID: "yolAna", Metin: "DeltaX"}, {Metin: safe(m.aktifGrup.Ad)}}
-		sol, sag = m.grupGorunumu()
+		sol, sag := m.grupGorunumu()
+		govde = arayuz.Bolunmus(arayuz.Yigin(sol...), arayuz.Yigin(sag...))
 		e.Durum = m.uyeDurumu()
 	default:
 		e.Yol = []arayuz.Kirinti{{Metin: "DeltaX"}}
-		sol, sag = m.girisGorunumu()
+		sol, sag := m.girisGorunumu()
+		govde = arayuz.Bolunmus(arayuz.Yigin(sol...), arayuz.Yigin(sag...))
 		e.Durum = safe(m.identity.Name)
 	}
 	e.Diyalog = m.diyalogu()
 	if bildirim := m.bildirimOgesi(); bildirim != nil {
 		if e.Diyalog != nil && m.isErr {
 			// Hata, kullanıcının baktığı diyaloğun içinde görünür.
-			govde := arayuz.Yigin(*bildirim)
+			d := arayuz.Yigin(*bildirim)
 			if e.Diyalog.Govde != nil {
-				govde.Cocuklar = append(govde.Cocuklar, *e.Diyalog.Govde)
+				d.Cocuklar = append(d.Cocuklar, *e.Diyalog.Govde)
 			}
-			e.Diyalog.Govde = &govde
+			e.Diyalog.Govde = &d
 		} else {
-			sag = append([]arayuz.Oge{*bildirim}, sag...)
+			govde = basinaEkle(govde, *bildirim)
 		}
 	}
-	e.Govde = new(arayuz.Bolunmus(arayuz.Yigin(sol...), arayuz.Yigin(sag...)))
+	e.Govde = &govde
 	return e
+}
+
+// basinaEkle, ileti kartını görünümün başına koyar: iki bölmeli görünümde
+// sağ bölmenin başına.
+func basinaEkle(govde, b arayuz.Oge) arayuz.Oge {
+	switch {
+	case govde.Tur == arayuz.TurBolunmus && govde.Sag != nil && govde.Sag.Tur == arayuz.TurYigin:
+		sag := *govde.Sag
+		sag.Cocuklar = append([]arayuz.Oge{b}, sag.Cocuklar...)
+		govde.Sag = &sag
+		return govde
+	case govde.Tur == arayuz.TurYigin:
+		govde.Cocuklar = append([]arayuz.Oge{b}, govde.Cocuklar...)
+		return govde
+	}
+	return arayuz.Yigin(b, govde)
 }
 
 // bildirimOgesi, modelin son iletisidir (m.notice): hata ya da bilgi kartı.
@@ -264,6 +287,14 @@ func (m model) diyalogu() *arayuz.Diyalog {
 		)
 		return &arayuz.Diyalog{ID: "yoneticilerD", Baslik: dil.T("Yöneticiler"), Govde: &govde,
 			Dugmeler: []arayuz.Oge{arayuz.Dugme("vazgec", dil.T("Kapat"))}}
+	case ekYeniDal:
+		aciklama := ""
+		if m.dalKaynak != "" {
+			aciklama = dil.F("Yeni dal %s kaydından başlar.", kisaHash(m.dalKaynak))
+		}
+		return formDiyalogu("yeniDalD", dil.T("Yeni dal"), aciklama,
+			arayuz.Form("dalFormu", arayuz.Girdi("ad", dil.T("Ad"), m.yeniDalIn.Value(), arayuz.Odakli, arayuz.Zorunlu, arayuz.IleEnUzun(60))),
+			dil.T("Oluştur"))
 	case ekOnay:
 		baslik, satirlar := m.onayMetni()
 		if baslik == "" {
